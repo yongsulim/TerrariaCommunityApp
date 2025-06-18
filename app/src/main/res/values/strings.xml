@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">TerrariaCommunityApp</string>
+    <string name="naver_client_id">eZqaEsqhAkO4wwB_H3PO</string>
+    <string name="naver_client_secret">SJ8lggyNam</string>
+    <string name="naver_client_name">TerrariaCommunityApp</string>
+    <string name="default_web_client_id">YOUR_WEB_CLIENT_ID</string>
+</resources>

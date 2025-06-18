@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "135646708065",
+    "project_id": "terrariacommunityapp",
+    "storage_bucket": "terrariacommunityapp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:135646708065:android:b9eb37d1997fe733974520",
+        "android_client_info": {
+          "package_name": "com.example.terrariacommunityapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCXvDhqfcLw-G9BZUMSCOmDnzNuKYFpMYg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
