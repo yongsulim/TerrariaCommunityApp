@@ -248,8 +248,30 @@ fun LoginScreen(modifier: Modifier = Modifier, googleSignInClient: GoogleSignInC
             Text("Google 로그인")
         }
         Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = { NaverIdLoginSDK.authenticate(context, naverCallback) }) {
-            Text("네이버 로그인")
+        Button(onClick = {
+            NaverIdLoginSDK.authenticate(context, naverCallback)
+        }) {
+            Text("Naver 로그인")
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(onClick = {
+            firebaseAuth.signInAnonymously()
+                .addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        Log.d(TAG, "Firebase Guest sign-in successful")
+                        onSignInSuccess()
+                    } else {
+                        Log.w(TAG, "Firebase Guest sign-in failed", task.exception)
+                    }
+                }
+        }) {
+            Text("게스트 로그인")
         }
     }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun DefaultPreview() {
+    // ... existing code ...
 }
