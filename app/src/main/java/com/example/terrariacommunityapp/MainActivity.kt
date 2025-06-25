@@ -48,6 +48,19 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Settings
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.safeDrawingPadding
+
+sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
+    object Board : Screen("board", "게시판", Icons.Filled.Home)
+    object Settings : Screen("settings", "설정", Icons.Filled.Settings)
+}
 
 class MainActivity : ComponentActivity() {
     private lateinit var googleSignInClient: GoogleSignInClient
@@ -89,94 +102,129 @@ class MainActivity : ComponentActivity() {
             TerrariaCommunityAppTheme {
                 val navController = rememberNavController()
                 val coroutineScope = rememberCoroutineScope()
+                val currentBackStackEntry by navController.currentBackStackEntryAsState()
+                val currentRoute = currentBackStackEntry?.destination?.route
 
                 LaunchedEffect(Unit) {
                     refreshPosts()
                 }
 
-                NavHost(navController = navController, startDestination = "login") {
-                    composable("login") {
-                        LoginScreen(
-                            modifier = Modifier.fillMaxSize(),
-                            googleSignInClient = googleSignInClient,
-                            firebaseAuth = firebaseAuth,
-                            onSignInSuccess = {
-                                // 로그인 성공 시 게시판 화면으로 이동 및 게시물 새로고침
-                                refreshPosts()
-                                navController.navigate("board") {
-                                    popUpTo("login") { inclusive = true }
-                                }
-                            },
-                            onNaverSignInSuccess = { accessToken ->
-                                // 네이버 로그인 성공 후 Firebase 연동
-                                val provider = OAuthProvider.newBuilder("naver.com")
-                                provider.addCustomParameter("access_token", accessToken)
-
-                                firebaseAuth.startActivityForSignInWithProvider(this@MainActivity, provider.build())
-                                    .addOnSuccessListener { authResult ->
-                                        Log.d(TAG, "Firebase Naver sign-in successful")
-                                        refreshPosts()
-                                        navController.navigate("board") {
-                                            popUpTo("login") { inclusive = true }
+                Scaffold(
+                    bottomBar = {
+                        if (currentRoute != "login") { // 로그인 화면에서는 하단 바를 숨김
+                            NavigationBar {
+                                val items = listOf(Screen.Board, Screen.Settings)
+                                items.forEach { screen ->
+                                    NavigationBarItem(
+                                        icon = { Icon(screen.icon, contentDescription = screen.title) },
+                                        label = { Text(screen.title) },
+                                        selected = currentRoute == screen.route,
+                                        onClick = {
+                                            navController.navigate(screen.route) {
+                                                popUpTo(navController.graph.startDestinationId) {
+                                                    saveState = true
+                                                }
+                                                launchSingleTop = true
+                                                restoreState = true
+                                            }
                                         }
-                                    }
-                                    .addOnFailureListener { exception ->
-                                        Log.w(TAG, "Firebase Naver sign-in failed", exception)
-                                    }
+                                    )
+                                }
                             }
-                        )
+                        }
                     }
-                    composable("board") {
-                        BoardScreen(
-                            posts = posts,
-                            onPostClick = { postId -> navController.navigate("post_detail/$postId") },
-                            onAddPostClick = { navController.navigate("post_edit") }
-                        )
-                    }
-                    composable(
-                        "post_detail/{postId}",
-                        arguments = listOf(navArgument("postId") { type = NavType.StringType })
-                    ) { backStackEntry ->
-                        val postId = backStackEntry.arguments?.getString("postId")
-                        if (postId != null) {
-                            PostDetailScreen(
-                                postId = postId,
-                                postRepository = postRepository,
-                                onBack = { navController.popBackStack() },
-                                onEditPost = { editPostId -> navController.navigate("post_edit/$editPostId") },
-                                onDeletePost = {
-                                    coroutineScope.launch {
-                                        postRepository.deletePost(it)
-                                        refreshPosts()
-                                        navController.popBackStack() // Go back after delete
+                ) { paddingValues ->
+                    NavHost(
+                        navController = navController,
+                        startDestination = "login",
+                        modifier = Modifier.padding(paddingValues) // Scaffold 패딩 적용
+                    ) {
+                        composable("login") {
+                            LoginScreen(
+                                modifier = Modifier.fillMaxSize(),
+                                googleSignInClient = googleSignInClient,
+                                firebaseAuth = firebaseAuth,
+                                onSignInSuccess = {
+                                    // 로그인 성공 시 게시판 화면으로 이동 및 게시물 새로고침
+                                    refreshPosts()
+                                    navController.navigate(Screen.Board.route) { // "board" 라우트로 변경
+                                        popUpTo("login") { inclusive = true }
                                     }
+                                },
+                                onNaverSignInSuccess = { accessToken ->
+                                    // 네이버 로그인 성공 후 Firebase 연동
+                                    val provider = OAuthProvider.newBuilder("naver.com")
+                                    provider.addCustomParameter("access_token", accessToken)
+
+                                    firebaseAuth.startActivityForSignInWithProvider(this@MainActivity, provider.build())
+                                        .addOnSuccessListener { authResult ->
+                                            Log.d(TAG, "Firebase Naver sign-in successful")
+                                            refreshPosts()
+                                            navController.navigate(Screen.Board.route) { // "board" 라우트로 변경
+                                                popUpTo("login") { inclusive = true }
+                                            }
+                                        }
+                                        .addOnFailureListener { exception ->
+                                            Log.w(TAG, "Firebase Naver sign-in failed", exception)
+                                        }
                                 }
                             )
                         }
-                    }
-                    composable(
-                        "post_edit/{postId}",
-                        arguments = listOf(navArgument("postId") { type = NavType.StringType; nullable = true })
-                    ) { backStackEntry ->
-                        val postId = backStackEntry.arguments?.getString("postId")
-                        PostEditScreen(
-                            postId = postId,
-                            postRepository = postRepository,
-                            onBack = {
-                                refreshPosts()
-                                navController.popBackStack()
+                        composable(Screen.Board.route) {
+                            BoardScreen(
+                                posts = posts,
+                                onPostClick = { postId -> navController.navigate("post_detail/$postId") },
+                                onAddPostClick = { navController.navigate("post_edit") }
+                            )
+                        }
+                        composable(Screen.Settings.route) { // 설정 화면 추가
+                            SettingsScreen(modifier = Modifier.fillMaxSize())
+                        }
+                        composable(
+                            "post_detail/{postId}",
+                            arguments = listOf(navArgument("postId") { type = NavType.StringType })
+                        ) { backStackEntry ->
+                            val postId = backStackEntry.arguments?.getString("postId")
+                            if (postId != null) {
+                                PostDetailScreen(
+                                    postId = postId,
+                                    postRepository = postRepository,
+                                    onBack = { navController.popBackStack() },
+                                    onEditPost = { editPostId -> navController.navigate("post_edit/$editPostId") },
+                                    onDeletePost = {
+                                        coroutineScope.launch {
+                                            postRepository.deletePost(it)
+                                            refreshPosts()
+                                            navController.popBackStack() // Go back after delete
+                                        }
+                                    }
+                                )
                             }
-                        )
-                    }
-                    composable("post_edit") {
-                        PostEditScreen(
-                            postId = null,
-                            postRepository = postRepository,
-                            onBack = {
-                                refreshPosts()
-                                navController.popBackStack()
-                            }
-                        )
+                        }
+                        composable(
+                            "post_edit/{postId}",
+                            arguments = listOf(navArgument("postId") { type = NavType.StringType; nullable = true })
+                        ) { backStackEntry ->
+                            val postId = backStackEntry.arguments?.getString("postId")
+                            PostEditScreen(
+                                postId = postId,
+                                postRepository = postRepository,
+                                onBack = {
+                                    refreshPosts()
+                                    navController.popBackStack()
+                                }
+                            )
+                        }
+                        composable("post_edit") {
+                            PostEditScreen(
+                                postId = null,
+                                postRepository = postRepository,
+                                onBack = {
+                                    refreshPosts()
+                                    navController.popBackStack()
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -247,12 +295,12 @@ fun LoginScreen(modifier: Modifier = Modifier, googleSignInClient: GoogleSignInC
         Button(onClick = { googleLauncher.launch(googleSignInClient.signInIntent) }) {
             Text("Google 로그인")
         }
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = {
-            NaverIdLoginSDK.authenticate(context, naverCallback)
-        }) {
-            Text("Naver 로그인")
-        }
+//        Spacer(modifier = Modifier.height(16.dp))
+//        Button(onClick = {
+//            NaverIdLoginSDK.authenticate(context, naverCallback)
+//        }) {
+//            Text("Naver 로그인")
+//        }
         Spacer(modifier = Modifier.height(16.dp))
         Button(onClick = {
             firebaseAuth.signInAnonymously()
@@ -270,8 +318,21 @@ fun LoginScreen(modifier: Modifier = Modifier, googleSignInClient: GoogleSignInC
     }
 }
 
+@Composable
+fun SettingsScreen(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(text = "설정 화면", style = MaterialTheme.typography.headlineMedium)
+    }
+}
+
 @Preview(showBackground = true)
 @Composable
 fun DefaultPreview() {
-    // ... existing code ...
+    TerrariaCommunityAppTheme {
+        LoginScreen(modifier = Modifier.fillMaxSize(), googleSignInClient = GoogleSignIn.getClient(LocalContext.current, GoogleSignInOptions.Builder().build()), firebaseAuth = Firebase.auth, onSignInSuccess = {}, onNaverSignInSuccess = {})
+    }
 }
