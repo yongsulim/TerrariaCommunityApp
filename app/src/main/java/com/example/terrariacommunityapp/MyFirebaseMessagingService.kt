@@ -47,7 +47,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
     private fun sendRegistrationToServer(token: String?) {
         // TODO: Implement this method to send token to your app server.
-        Log.d(TAG, "sendRegistrationToServer($token)")
+        Log.d(TAG, "FCM registration token: $token")
     }
 
     private fun sendNotification(messageBody: String) {

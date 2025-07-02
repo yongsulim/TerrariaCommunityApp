@@ -53,9 +53,21 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.navigation.NavController
+import androidx.compose.runtime.getValue
+import androidx.compose.material3.Icon
+import com.example.terrariacommunityapp.BoardScreen
+import com.example.terrariacommunityapp.PostDetailScreen
+import com.example.terrariacommunityapp.PostEditScreen
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.Switch
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.ListItem
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     object Board : Screen("board", "게시판", Icons.Filled.Home)
@@ -99,19 +111,20 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
         setContent {
-            TerrariaCommunityAppTheme {
+            // Use a mutable state to control the theme
+            val systemDarkTheme = isSystemInDarkTheme()
+            var darkTheme by remember { mutableStateOf(systemDarkTheme) }
+
+            TerrariaCommunityAppTheme(darkTheme = darkTheme) { // Pass the darkTheme state
                 val navController = rememberNavController()
                 val coroutineScope = rememberCoroutineScope()
                 val currentBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = currentBackStackEntry?.destination?.route
-
-                LaunchedEffect(Unit) {
-                    refreshPosts()
-                }
+                var showBottomBar by remember { mutableStateOf(false) }
 
                 Scaffold(
                     bottomBar = {
-                        if (currentRoute != "login") { // 로그인 화면에서는 하단 바를 숨김
+                        if (showBottomBar) { // Use the state variable here
                             NavigationBar {
                                 val items = listOf(Screen.Board, Screen.Settings)
                                 items.forEach { screen ->
@@ -137,40 +150,26 @@ class MainActivity : ComponentActivity() {
                     NavHost(
                         navController = navController,
                         startDestination = "login",
-                        modifier = Modifier.padding(paddingValues) // Scaffold 패딩 적용
+                        modifier = Modifier.padding(paddingValues)
                     ) {
                         composable("login") {
+                            LaunchedEffect(Unit) { showBottomBar = false }
                             LoginScreen(
                                 modifier = Modifier.fillMaxSize(),
                                 googleSignInClient = googleSignInClient,
                                 firebaseAuth = firebaseAuth,
                                 onSignInSuccess = {
-                                    // 로그인 성공 시 게시판 화면으로 이동 및 게시물 새로고침
-                                    refreshPosts()
-                                    navController.navigate(Screen.Board.route) { // "board" 라우트로 변경
+                                    navController.navigate(Screen.Board.route) {
                                         popUpTo("login") { inclusive = true }
                                     }
-                                },
-                                onNaverSignInSuccess = { accessToken ->
-                                    // 네이버 로그인 성공 후 Firebase 연동
-                                    val provider = OAuthProvider.newBuilder("naver.com")
-                                    provider.addCustomParameter("access_token", accessToken)
-
-                                    firebaseAuth.startActivityForSignInWithProvider(this@MainActivity, provider.build())
-                                        .addOnSuccessListener { authResult ->
-                                            Log.d(TAG, "Firebase Naver sign-in successful")
-                                            refreshPosts()
-                                            navController.navigate(Screen.Board.route) { // "board" 라우트로 변경
-                                                popUpTo("login") { inclusive = true }
-                                            }
-                                        }
-                                        .addOnFailureListener { exception ->
-                                            Log.w(TAG, "Firebase Naver sign-in failed", exception)
-                                        }
                                 }
                             )
                         }
                         composable(Screen.Board.route) {
+                            LaunchedEffect(Unit) { // 게시판 화면이 구성될 때 게시물 새로고침 및 하단 바 표시
+                                refreshPosts()
+                                showBottomBar = true // Show after data is loaded
+                            }
                             BoardScreen(
                                 posts = posts,
                                 onPostClick = { postId -> navController.navigate("post_detail/$postId") },
@@ -178,7 +177,12 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         composable(Screen.Settings.route) { // 설정 화면 추가
-                            SettingsScreen(modifier = Modifier.fillMaxSize())
+                            LaunchedEffect(Unit) { showBottomBar = true }
+                            SettingsScreen(
+                                modifier = Modifier.fillMaxSize(),
+                                currentDarkTheme = darkTheme, // Pass current theme state
+                                onToggleTheme = { darkTheme = it } // Pass callback to toggle theme
+                            )
                         }
                         composable(
                             "post_detail/{postId}",
@@ -193,7 +197,7 @@ class MainActivity : ComponentActivity() {
                                     onEditPost = { editPostId -> navController.navigate("post_edit/$editPostId") },
                                     onDeletePost = {
                                         coroutineScope.launch {
-                                            postRepository.deletePost(it)
+                                            postRepository.deletePost(postId)
                                             refreshPosts()
                                             navController.popBackStack() // Go back after delete
                                         }
@@ -232,7 +236,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun refreshPosts() {
-        // Launch a coroutine to fetch posts asynchronously
         lifecycleScope.launch {
             posts.clear()
             posts.addAll(postRepository.getPosts())
@@ -241,7 +244,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun LoginScreen(modifier: Modifier = Modifier, googleSignInClient: GoogleSignInClient, firebaseAuth: FirebaseAuth, onSignInSuccess: () -> Unit, onNaverSignInSuccess: (String) -> Unit) {
+fun LoginScreen(modifier: Modifier = Modifier, googleSignInClient: GoogleSignInClient, firebaseAuth: FirebaseAuth, onSignInSuccess: () -> Unit) {
     val googleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         val task = GoogleSignIn.getSignedInAccountFromIntent(it.data)
         try {
@@ -251,10 +254,9 @@ fun LoginScreen(modifier: Modifier = Modifier, googleSignInClient: GoogleSignInC
                 .addOnCompleteListener { authTask ->
                     if (authTask.isSuccessful) {
                         Log.d(TAG, "Firebase Google sign-in successful")
-                        onSignInSuccess() // Call success callback
+                        onSignInSuccess()
                     } else {
                         Log.w(TAG, "Firebase Google sign-in failed", authTask.exception)
-                        // Sign in failed
                     }
                 }
         } catch (e: ApiException) {
@@ -262,47 +264,21 @@ fun LoginScreen(modifier: Modifier = Modifier, googleSignInClient: GoogleSignInC
         }
     }
 
-    val naverCallback = object : OAuthLoginCallback {
-        override fun onSuccess() {
-            val accessToken = NaverIdLoginSDK.getAccessToken()
-            if (accessToken != null) {
-                Log.d(TAG, "Naver Login success: $accessToken")
-                onNaverSignInSuccess(accessToken)
-            } else {
-                Log.w(TAG, "Naver Login success but access token is null")
-            }
-        }
-
-        override fun onFailure(httpStatus: Int, message: String) {
-            val errorCode = NaverIdLoginSDK.getLastErrorCode().code
-            val errorDescription = NaverIdLoginSDK.getLastErrorDescription()
-            Log.e(TAG, "Naver Login failed: errorCode:$errorCode, errorDesc:$errorDescription, httpStatus:$httpStatus, message:$message")
-        }
-
-        override fun onError(errorCode: Int, message: String) {
-            onFailure(errorCode, message) // Re-use onFailure for error cases
-        }
-    }
-
-    val context = LocalContext.current // Get context within Composable
-
     Column(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(text = "테라리아 커뮤니티 앱", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.padding(bottom = 32.dp))
-        Button(onClick = { googleLauncher.launch(googleSignInClient.signInIntent) }) {
+        Button(onClick = {
+            Log.d(TAG, "Google Login button clicked")
+            googleLauncher.launch(googleSignInClient.signInIntent)
+        }) {
             Text("Google 로그인")
         }
-//        Spacer(modifier = Modifier.height(16.dp))
-//        Button(onClick = {
-//            NaverIdLoginSDK.authenticate(context, naverCallback)
-//        }) {
-//            Text("Naver 로그인")
-//        }
         Spacer(modifier = Modifier.height(16.dp))
         Button(onClick = {
+            Log.d(TAG, "Guest Login button clicked")
             firebaseAuth.signInAnonymously()
                 .addOnCompleteListener { task ->
                     if (task.isSuccessful) {
@@ -319,13 +295,28 @@ fun LoginScreen(modifier: Modifier = Modifier, googleSignInClient: GoogleSignInC
 }
 
 @Composable
-fun SettingsScreen(modifier: Modifier = Modifier) {
+fun SettingsScreen(modifier: Modifier = Modifier, currentDarkTheme: Boolean, onToggleTheme: (Boolean) -> Unit) {
     Column(
-        modifier = modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
+        modifier = modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.Top,
+        horizontalAlignment = Alignment.Start
     ) {
-        Text(text = "설정 화면", style = MaterialTheme.typography.headlineMedium)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (currentDarkTheme) "라이트 모드" else "다크 모드",
+                style = MaterialTheme.typography.bodyLarge
+            )
+            Spacer(Modifier.weight(1f))
+            Switch(
+                checked = currentDarkTheme,
+                onCheckedChange = { onToggleTheme(it) }
+            )
+        }
     }
 }
 
@@ -333,6 +324,6 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
 @Composable
 fun DefaultPreview() {
     TerrariaCommunityAppTheme {
-        LoginScreen(modifier = Modifier.fillMaxSize(), googleSignInClient = GoogleSignIn.getClient(LocalContext.current, GoogleSignInOptions.Builder().build()), firebaseAuth = Firebase.auth, onSignInSuccess = {}, onNaverSignInSuccess = {})
+        LoginScreen(modifier = Modifier.fillMaxSize(), googleSignInClient = GoogleSignIn.getClient(LocalContext.current, GoogleSignInOptions.Builder().build()), firebaseAuth = Firebase.auth, onSignInSuccess = {})
     }
 }

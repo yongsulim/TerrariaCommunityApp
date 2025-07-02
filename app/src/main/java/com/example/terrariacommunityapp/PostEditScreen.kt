@@ -8,6 +8,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.ktx.Firebase
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -16,6 +19,7 @@ fun PostEditScreen(postId: String?, postRepository: PostRepository = PostReposit
     val title = remember { mutableStateOf("") }
     val content = remember { mutableStateOf("") }
     val author = remember { mutableStateOf("") }
+    val firebaseAuth = Firebase.auth
 
     LaunchedEffect(postId) {
         if (!postId.isNullOrEmpty()) {
@@ -26,6 +30,15 @@ fun PostEditScreen(postId: String?, postRepository: PostRepository = PostReposit
                     content.value = it.content
                     author.value = it.author
                 }
+            }
+        } else {
+            // New post: set author based on current user
+            val currentUser = firebaseAuth.currentUser
+            author.value = when {
+                currentUser == null -> "알 수 없음" // Should not happen if user is logged in
+                currentUser.isAnonymous -> "게스트"
+                currentUser.displayName != null -> currentUser.displayName!!
+                else -> "알 수 없음"
             }
         }
     }
@@ -65,7 +78,8 @@ fun PostEditScreen(postId: String?, postRepository: PostRepository = PostReposit
                 value = author.value,
                 onValueChange = { author.value = it },
                 label = { Text("작성자") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                readOnly = true // Make author field read-only
             )
             Button(
                 onClick = {
