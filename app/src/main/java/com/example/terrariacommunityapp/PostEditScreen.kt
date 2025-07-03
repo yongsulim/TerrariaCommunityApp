@@ -11,6 +11,11 @@ import kotlinx.coroutines.launch
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -20,6 +25,9 @@ fun PostEditScreen(postId: String?, postRepository: PostRepository = PostReposit
     val content = remember { mutableStateOf("") }
     val author = remember { mutableStateOf("") }
     val firebaseAuth = Firebase.auth
+    val categories = listOf("공지", "질문", "자유") // Define available categories
+    var selectedCategory by remember { mutableStateOf(categories[0]) } // Initialize with first category
+    var expanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(postId) {
         if (!postId.isNullOrEmpty()) {
@@ -29,6 +37,7 @@ fun PostEditScreen(postId: String?, postRepository: PostRepository = PostReposit
                     title.value = it.title
                     content.value = it.content
                     author.value = it.author
+                    selectedCategory = it.category.ifBlank { categories[0] } // Load existing category
                 }
             }
         } else {
@@ -68,6 +77,41 @@ fun PostEditScreen(postId: String?, postRepository: PostRepository = PostReposit
                 label = { Text("제목") },
                 modifier = Modifier.fillMaxWidth()
             )
+
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = {
+                    expanded = !expanded
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = selectedCategory,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("카테고리") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                    modifier = Modifier.menuAnchor().fillMaxWidth()
+                )
+
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = {
+                        expanded = false
+                    }
+                ) {
+                    categories.forEach { category ->
+                        DropdownMenuItem(
+                            text = { Text(text = category) },
+                            onClick = {
+                                selectedCategory = category
+                                expanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
             OutlinedTextField(
                 value = content.value,
                 onValueChange = { content.value = it },
@@ -89,7 +133,8 @@ fun PostEditScreen(postId: String?, postRepository: PostRepository = PostReposit
                             val newPost = Post(
                                 title = title.value,
                                 content = content.value,
-                                author = author.value
+                                author = author.value,
+                                category = selectedCategory // Add category
                             )
                             postRepository.addPost(newPost)
                         } else {
@@ -99,7 +144,8 @@ fun PostEditScreen(postId: String?, postRepository: PostRepository = PostReposit
                                 title = title.value,
                                 content = content.value,
                                 author = author.value,
-                                timestamp = postRepository.getPost(postId)?.timestamp ?: System.currentTimeMillis()
+                                timestamp = postRepository.getPost(postId)?.timestamp ?: System.currentTimeMillis(),
+                                category = selectedCategory // Add category
                             )
                             postRepository.updatePost(updatedPost)
                         }

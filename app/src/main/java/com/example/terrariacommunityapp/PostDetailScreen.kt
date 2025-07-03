@@ -13,16 +13,39 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Delete
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.ktx.Firebase
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material.icons.filled.ThumbDown
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Button
+import androidx.compose.material3.Divider
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.Alignment
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PostDetailScreen(postId: String, postRepository: PostRepository = PostRepository(), onBack: () -> Unit, onEditPost: (String) -> Unit, onDeletePost: (String) -> Unit) {
     val post = remember { mutableStateOf<Post?>(null) }
+    val comments = remember { mutableStateListOf<Comment>() }
+    val newCommentContent = remember { mutableStateOf("") }
     val coroutineScope = rememberCoroutineScope()
+    val commentRepository = remember { CommentRepository() }
+    val firebaseAuth = Firebase.auth
+    val currentUserUid = firebaseAuth.currentUser?.uid
 
     LaunchedEffect(postId) {
         coroutineScope.launch {
             post.value = postRepository.getPost(postId)
+            if (postId.isNotEmpty()) {
+                comments.clear()
+                comments.addAll(commentRepository.getCommentsForPost(postId))
+            }
         }
     }
 
@@ -57,14 +80,134 @@ fun PostDetailScreen(postId: String, postRepository: PostRepository = PostReposi
             post.value?.let { p ->
                 Text(text = p.title, style = MaterialTheme.typography.headlineLarge)
                 Spacer(modifier = Modifier.height(8.dp))
+                Text(text = "카테고리: ${p.category.ifBlank { "없음" }}", style = MaterialTheme.typography.bodyMedium)
                 Text(text = "작성자: ${p.author}", style = MaterialTheme.typography.bodyMedium)
                 Text(text = "날짜: ${SimpleDateFormat("yyyy.MM.dd HH:mm", Locale.getDefault()).format(Date(p.timestamp))}", style = MaterialTheme.typography.bodySmall)
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(text = p.content, style = MaterialTheme.typography.bodyLarge)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val isLiked = p.likedBy.contains(currentUserUid)
+                    IconButton(onClick = {
+                        currentUserUid?.let { uid ->
+                            coroutineScope.launch {
+                                postRepository.togglePostLike(p.id, uid)
+                                post.value = postRepository.getPost(p.id)
+                            }
+                        }
+                    }) {
+                        Icon(
+                            imageVector = if (isLiked) Icons.Filled.ThumbUp else Icons.Filled.ThumbDown,
+                            contentDescription = "좋아요",
+                            tint = if (isLiked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    Text(text = "${p.likesCount}")
+                }
+
+                Divider(modifier = Modifier.padding(vertical = 16.dp))
+
+                OutlinedTextField(
+                    value = newCommentContent.value,
+                    onValueChange = { newCommentContent.value = it },
+                    label = { Text("댓글 작성") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        currentUserUid?.let { uid ->
+                            if (newCommentContent.value.isNotBlank()) {
+                                coroutineScope.launch {
+                                    val authorName = firebaseAuth.currentUser?.displayName ?: if (firebaseAuth.currentUser?.isAnonymous == true) "게스트" else "알 수 없음"
+                                    val newComment = Comment(
+                                        postId = postId,
+                                        author = authorName,
+                                        content = newCommentContent.value
+                                    )
+                                    commentRepository.addComment(newComment)
+                                    newCommentContent.value = ""
+                                    comments.clear()
+                                    comments.addAll(commentRepository.getCommentsForPost(postId))
+                                }
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("댓글 작성")
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(text = "댓글", style = MaterialTheme.typography.titleLarge)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (comments.isEmpty()) {
+                    Text("아직 댓글이 없습니다.")
+                } else {
+                    LazyColumn {
+                        items(comments) { comment ->
+                            CommentItem(
+                                comment = comment,
+                                currentUserUid = currentUserUid,
+                                commentRepository = commentRepository,
+                                onCommentUpdated = {
+                                    coroutineScope.launch {
+                                        comments.clear()
+                                        comments.addAll(commentRepository.getCommentsForPost(postId))
+                                    }
+                                }
+                            )
+                            Divider()
+                        }
+                    }
+                }
             } ?: run {
-                // Loading or Error State
                 CircularProgressIndicator()
             }
+        }
+    }
+}
+
+@Composable
+fun CommentItem(
+    comment: Comment,
+    currentUserUid: String?,
+    commentRepository: CommentRepository,
+    onCommentUpdated: () -> Unit
+) {
+    val coroutineScope = rememberCoroutineScope()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = comment.author, style = MaterialTheme.typography.titleSmall)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(text = comment.content, style = MaterialTheme.typography.bodyMedium)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(text = "날짜: ${SimpleDateFormat("yyyy.MM.dd HH:mm", Locale.getDefault()).format(Date(comment.timestamp))}", style = MaterialTheme.typography.bodySmall)
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            val isLiked = comment.likedBy.contains(currentUserUid)
+            IconButton(onClick = {
+                currentUserUid?.let { uid ->
+                    coroutineScope.launch {
+                        commentRepository.toggleCommentLike(comment.id, uid)
+                        onCommentUpdated()
+                    }
+                }
+            }) {
+                Icon(
+                    imageVector = if (isLiked) Icons.Filled.ThumbUp else Icons.Filled.ThumbDown,
+                    contentDescription = "댓글 좋아요",
+                    tint = if (isLiked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Text(text = "${comment.likesCount}")
         }
     }
 }

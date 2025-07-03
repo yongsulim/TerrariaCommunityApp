@@ -13,10 +13,31 @@ import androidx.compose.ui.unit.dp
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BoardScreen(posts: List<Post>, onPostClick: (String) -> Unit, onAddPostClick: () -> Unit) {
+fun BoardScreen(
+    posts: List<Post>,
+    popularPosts: List<Post>,
+    onPostClick: (String) -> Unit,
+    onAddPostClick: () -> Unit,
+    onCategorySelected: (String?, String) -> Unit,
+    searchQuery: String,
+    onSearchQueryChanged: (String) -> Unit
+) {
+    val categories = listOf("모두", "공지", "질문", "자유")
+    var selectedCategory by remember { mutableStateOf<String?>(null) }
+    val tabs = listOf("최신글", "인기글")
+    var selectedTab by remember { mutableStateOf(tabs[0]) }
+
     Scaffold(
         topBar = {
             TopAppBar(title = { Text("게시판") })
@@ -27,10 +48,48 @@ fun BoardScreen(posts: List<Post>, onPostClick: (String) -> Unit, onAddPostClick
             }
         }
     ) { paddingValues ->
-        LazyColumn(modifier = Modifier.padding(paddingValues).fillMaxSize()) {
-            items(posts) { post ->
-                PostItem(post = post, onPostClick = onPostClick)
-                Divider()
+        Column(modifier = Modifier.padding(paddingValues).fillMaxSize()) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = onSearchQueryChanged,
+                label = { Text("검색") },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+            LazyRow(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp)
+            ) {
+                items(categories) { category ->
+                    FilterChip(
+                        selected = selectedCategory == category || (selectedCategory == null && category == "모두"),
+                        onClick = {
+                            val newCategory = if (category == "모두") null else category
+                            selectedCategory = newCategory
+                            onCategorySelected(newCategory, selectedTab)
+                        },
+                        label = { Text(category) }
+                    )
+                }
+            }
+
+            TabRow(selectedTabIndex = tabs.indexOf(selectedTab)) {
+                tabs.forEachIndexed { _, title ->
+                    Tab(
+                        selected = selectedTab == title,
+                        onClick = { selectedTab = title },
+                        text = { Text(title) }
+                    )
+                }
+            }
+
+            val currentPosts = if (selectedTab == "최신글") posts else popularPosts
+
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                items(currentPosts) { post ->
+                    PostItem(post = post, onPostClick = onPostClick)
+                    HorizontalDivider()
+                }
             }
         }
     }

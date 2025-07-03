@@ -68,6 +68,18 @@ import androidx.compose.material3.Switch
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.ListItem
+import com.google.android.gms.ads.MobileAds
+import com.google.android.gms.ads.AdView
+import com.google.android.gms.ads.AdSize
+import com.google.android.gms.ads.AdRequest
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.ui.platform.LocalDensity
+import com.google.android.gms.ads.interstitial.InterstitialAd
+import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
+import com.google.android.gms.ads.FullScreenContentCallback
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     object Board : Screen("board", "게시판", Icons.Filled.Home)
@@ -79,6 +91,11 @@ class MainActivity : ComponentActivity() {
     private lateinit var firebaseAuth: FirebaseAuth
     private val postRepository = PostRepository()
     private val posts = mutableStateListOf<Post>()
+    private val popularPosts = mutableStateListOf<Post>()
+    private var mInterstitialAd: InterstitialAd? = null
+    private var _selectedCategory by mutableStateOf<String?>(null)
+    private var _searchQuery by mutableStateOf("")
+    private var _currentBoardContentType by mutableStateOf("최신글")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -109,6 +126,12 @@ class MainActivity : ComponentActivity() {
             Log.d(TAG, "FCM Registration Token: $token")
         }
 
+        // Initialize Google Mobile Ads SDK
+        MobileAds.initialize(this) {}
+
+        // Load Interstitial Ad
+        loadInterstitialAd()
+
         enableEdgeToEdge()
         setContent {
             // Use a mutable state to control the theme
@@ -125,24 +148,27 @@ class MainActivity : ComponentActivity() {
                 Scaffold(
                     bottomBar = {
                         if (showBottomBar) { // Use the state variable here
-                            NavigationBar {
-                                val items = listOf(Screen.Board, Screen.Settings)
-                                items.forEach { screen ->
-                                    NavigationBarItem(
-                                        icon = { Icon(screen.icon, contentDescription = screen.title) },
-                                        label = { Text(screen.title) },
-                                        selected = currentRoute == screen.route,
-                                        onClick = {
-                                            navController.navigate(screen.route) {
-                                                popUpTo(navController.graph.startDestinationId) {
-                                                    saveState = true
+                            Column {
+                                NavigationBar {
+                                    val items = listOf(Screen.Board, Screen.Settings)
+                                    items.forEach { screen ->
+                                        NavigationBarItem(
+                                            icon = { Icon(screen.icon, contentDescription = screen.title) },
+                                            label = { Text(screen.title) },
+                                            selected = currentRoute == screen.route,
+                                            onClick = {
+                                                navController.navigate(screen.route) {
+                                                    popUpTo(navController.graph.startDestinationId) {
+                                                        saveState = true
+                                                    }
+                                                    launchSingleTop = true
+                                                    restoreState = true
                                                 }
-                                                launchSingleTop = true
-                                                restoreState = true
                                             }
-                                        }
-                                    )
+                                        )
+                                    }
                                 }
+                                AdBanner(modifier = Modifier.fillMaxWidth())
                             }
                         }
                     }
@@ -167,13 +193,24 @@ class MainActivity : ComponentActivity() {
                         }
                         composable(Screen.Board.route) {
                             LaunchedEffect(Unit) { // 게시판 화면이 구성될 때 게시물 새로고침 및 하단 바 표시
-                                refreshPosts()
+                                refreshPosts(_selectedCategory, _currentBoardContentType, _searchQuery)
                                 showBottomBar = true // Show after data is loaded
                             }
                             BoardScreen(
                                 posts = posts,
+                                popularPosts = popularPosts,
                                 onPostClick = { postId -> navController.navigate("post_detail/$postId") },
-                                onAddPostClick = { navController.navigate("post_edit") }
+                                onAddPostClick = { navController.navigate("post_edit") },
+                                onCategorySelected = { category, currentTabFromBoard ->
+                                    _selectedCategory = category
+                                    _currentBoardContentType = currentTabFromBoard
+                                    refreshPosts(category, currentTabFromBoard, _searchQuery)
+                                },
+                                searchQuery = _searchQuery,
+                                onSearchQueryChanged = { newQuery ->
+                                    _searchQuery = newQuery
+                                    refreshPosts(_selectedCategory, _currentBoardContentType, newQuery)
+                                }
                             )
                         }
                         composable(Screen.Settings.route) { // 설정 화면 추가
@@ -235,10 +272,60 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun refreshPosts() {
+    private fun refreshPosts(category: String? = null, currentTab: String = "최신글", searchQuery: String = "") {
         lifecycleScope.launch {
             posts.clear()
-            posts.addAll(postRepository.getPosts())
+            popularPosts.clear()
+
+            if (currentTab == "최신글") {
+                if (searchQuery.isBlank()) {
+                    posts.addAll(postRepository.getPosts(category))
+                } else {
+                    posts.addAll(postRepository.searchPosts(searchQuery, category))
+                }
+            } else {
+                popularPosts.addAll(postRepository.getPopularPosts())
+            }
+        }
+    }
+
+    private fun loadInterstitialAd() {
+        val adRequest = AdRequest.Builder().build()
+        InterstitialAd.load(this, "ca-app-pub-9471537431449262/8513788914", adRequest, object : InterstitialAdLoadCallback() {
+            override fun onAdLoaded(interstitialAd: InterstitialAd) {
+                mInterstitialAd = interstitialAd
+                Log.d(TAG, "Interstitial Ad was loaded.")
+                mInterstitialAd?.fullScreenContentCallback = object: FullScreenContentCallback() {
+                    override fun onAdDismissedFullScreenContent() {
+                        Log.d(TAG, "Ad was dismissed.")
+                        mInterstitialAd = null
+                        loadInterstitialAd() // Load a new ad after dismissal
+                    }
+
+                    override fun onAdFailedToShowFullScreenContent(adError: com.google.android.gms.ads.AdError) {
+                        Log.d(TAG, "Ad failed to show.")
+                        mInterstitialAd = null
+                        loadInterstitialAd() // Load a new ad after failure
+                    }
+
+                    override fun onAdShowedFullScreenContent() {
+                        Log.d(TAG, "Ad showed fullscreen content.")
+                    }
+                }
+            }
+
+            override fun onAdFailedToLoad(loadAdError: com.google.android.gms.ads.LoadAdError) {
+                Log.d(TAG, loadAdError.message)
+                mInterstitialAd = null
+            }
+        })
+    }
+
+    private fun showInterstitialAd() {
+        if (mInterstitialAd != null) {
+            mInterstitialAd?.show(this)
+        } else {
+            Log.d(TAG, "The interstitial ad wasn't ready yet.")
         }
     }
 }
@@ -326,4 +413,28 @@ fun DefaultPreview() {
     TerrariaCommunityAppTheme {
         LoginScreen(modifier = Modifier.fillMaxSize(), googleSignInClient = GoogleSignIn.getClient(LocalContext.current, GoogleSignInOptions.Builder().build()), firebaseAuth = Firebase.auth, onSignInSuccess = {})
     }
+}
+
+@Composable
+fun AdBanner(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    AndroidView(
+        modifier = modifier.fillMaxWidth().wrapContentHeight(),
+        factory = {
+            AdView(context).apply {
+                setAdSize(AdSize.BANNER)
+                adUnitId = "ca-app-pub-9471537431449262/6534492831" // Your actual AdMob Banner ID
+                adListener = object : com.google.android.gms.ads.AdListener() {
+                    override fun onAdLoaded() {
+                        Log.d(TAG, "AdBanner loaded successfully")
+                    }
+
+                    override fun onAdFailedToLoad(adError: com.google.android.gms.ads.LoadAdError) {
+                        Log.e(TAG, "AdBanner failed to load: ${adError.message}")
+                    }
+                }
+                loadAd(AdRequest.Builder().build())
+            }
+        }
+    )
 }
