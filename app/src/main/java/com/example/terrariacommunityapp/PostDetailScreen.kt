@@ -9,17 +9,11 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Delete
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.filled.ThumbUp
-import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Button
 import androidx.compose.material3.Divider
@@ -27,6 +21,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.res.painterResource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,16 +50,16 @@ fun PostDetailScreen(postId: String, postRepository: PostRepository = PostReposi
                 title = { Text(post.value?.title ?: "게시물 불러오는 중...") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "뒤로 가기")
+                        Icon(painterResource(id = R.drawable.ic_arrow_back), contentDescription = "뒤로 가기")
                     }
                 },
                 actions = {
                     post.value?.let { p ->
                         IconButton(onClick = { onEditPost(p.id) }) {
-                            Icon(Icons.Default.Edit, contentDescription = "수정")
+                            Icon(painterResource(id = R.drawable.ic_edit), contentDescription = "수정")
                         }
                         IconButton(onClick = { onDeletePost(p.id) }) {
-                            Icon(Icons.Default.Delete, contentDescription = "삭제")
+                            Icon(painterResource(id = R.drawable.ic_delete), contentDescription = "삭제")
                         }
                     }
                 }
@@ -98,7 +93,7 @@ fun PostDetailScreen(postId: String, postRepository: PostRepository = PostReposi
                         }
                     }) {
                         Icon(
-                            imageVector = if (isLiked) Icons.Filled.ThumbUp else Icons.Filled.ThumbDown,
+                            painterResource(id = if (isLiked) R.drawable.ic_thumb_up else R.drawable.ic_thumb_down),
                             contentDescription = "좋아요",
                             tint = if (isLiked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                         )
@@ -117,7 +112,7 @@ fun PostDetailScreen(postId: String, postRepository: PostRepository = PostReposi
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
                     onClick = {
-                        currentUserUid?.let { uid ->
+                        currentUserUid?.let { _ ->
                             if (newCommentContent.value.isNotBlank()) {
                                 coroutineScope.launch {
                                     val authorName = firebaseAuth.currentUser?.displayName ?: if (firebaseAuth.currentUser?.isAnonymous == true) "게스트" else "알 수 없음"
@@ -159,7 +154,7 @@ fun PostDetailScreen(postId: String, postRepository: PostRepository = PostReposi
                                     }
                                 }
                             )
-                            Divider()
+                            HorizontalDivider()
                         }
                     }
                 }
@@ -202,7 +197,7 @@ fun CommentItem(
                 }
             }) {
                 Icon(
-                    imageVector = if (isLiked) Icons.Filled.ThumbUp else Icons.Filled.ThumbDown,
+                    painterResource(id = if (isLiked) R.drawable.ic_thumb_up else R.drawable.ic_thumb_down),
                     contentDescription = "댓글 좋아요",
                     tint = if (isLiked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                 )

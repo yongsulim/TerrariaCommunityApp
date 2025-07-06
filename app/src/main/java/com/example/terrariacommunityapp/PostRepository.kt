@@ -75,6 +75,7 @@ class PostRepository {
             val postRef = postsCollection.document(postId)
             db.runTransaction { transaction ->
                 val snapshot = transaction.get(postRef)
+                @Suppress("UNCHECKED_CAST")
                 val likedBy: List<String> = snapshot.get("likedBy") as? List<String> ?: emptyList()
                 val newLikesCount = if (likedBy.contains(userId)) {
                     transaction.update(postRef, "likedBy", likedBy - userId)

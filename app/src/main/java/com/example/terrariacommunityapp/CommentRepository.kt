@@ -40,6 +40,7 @@ class CommentRepository {
             val commentRef = commentsCollection.document(commentId)
             db.runTransaction { transaction ->
                 val snapshot = transaction.get(commentRef)
+                @Suppress("UNCHECKED_CAST")
                 val likes: List<String> = snapshot.get("likedBy") as? List<String> ?: emptyList()
                 val newLikesCount = if (likes.contains(userId)) {
                     transaction.update(commentRef, "likedBy", likes - userId)
