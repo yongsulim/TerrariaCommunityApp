@@ -15,11 +15,23 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.res.painterResource
+import com.example.terrariacommunityapp.UserRepository
+import android.net.Uri
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Image
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
+import android.util.Log
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PostEditScreen(postId: String?, postRepository: PostRepository = PostRepository(), onBack: () -> Unit) {
+fun PostEditScreen(postId: String?, postRepository: PostRepository = PostRepository(), onBack: () -> Unit, userRepository: UserRepository = UserRepository()) {
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
     val title = remember { mutableStateOf("") }
     val content = remember { mutableStateOf("") }
     val author = remember { mutableStateOf("") }
@@ -27,6 +39,13 @@ fun PostEditScreen(postId: String?, postRepository: PostRepository = PostReposit
     val categories = listOf("공지", "질문", "자유") // Define available categories
     var selectedCategory by remember { mutableStateOf(categories[0]) } // Initialize with first category
     var expanded by remember { mutableStateOf(false) }
+    var originalAuthorId by remember { mutableStateOf("") } // To store authorId of existing post
+    var originalTimestamp by remember { mutableStateOf(System.currentTimeMillis()) } // To store timestamp of existing post
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) } // 선택된 이미지 URI 상태
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        selectedImageUri = uri
+    }
 
     LaunchedEffect(postId) {
         if (!postId.isNullOrEmpty()) {
@@ -37,6 +56,9 @@ fun PostEditScreen(postId: String?, postRepository: PostRepository = PostReposit
                     content.value = it.content
                     author.value = it.author
                     selectedCategory = it.category.ifBlank { categories[0] } // Load existing category
+                    originalAuthorId = it.authorId // Store existing authorId
+                    originalTimestamp = it.timestamp // Store existing timestamp
+                    selectedImageUri = it.imageUrl?.let { Uri.parse(it) } // 기존 이미지 URL 로드
                 }
             }
         } else {
@@ -111,6 +133,29 @@ fun PostEditScreen(postId: String?, postRepository: PostRepository = PostReposit
                 }
             }
 
+            // 이미지 선택 버튼
+            Button(
+                onClick = { imagePickerLauncher.launch("image/*") },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Filled.Image, contentDescription = "이미지 선택")
+                Spacer(Modifier.width(8.dp))
+                Text("이미지 선택")
+            }
+
+            // 선택된 이미지 미리보기
+            selectedImageUri?.let { uri ->
+                AsyncImage(
+                    model = uri,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentScale = ContentScale.Crop
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
             OutlinedTextField(
                 value = content.value,
                 onValueChange = { content.value = it },
@@ -127,15 +172,37 @@ fun PostEditScreen(postId: String?, postRepository: PostRepository = PostReposit
             Button(
                 onClick = {
                     coroutineScope.launch {
+                        val currentUser = firebaseAuth.currentUser
+                        var uploadedImageUrl: String? = null
+
+                        if (selectedImageUri != null) {
+                            try {
+                                uploadedImageUrl = postRepository.uploadImage(selectedImageUri!!)
+                                if (uploadedImageUrl == null) {
+                                    Toast.makeText(context, "이미지 업로드 실패", Toast.LENGTH_SHORT).show()
+                                    return@launch // 이미지 업로드 실패 시 게시물 저장 중단
+                                }
+                            } catch (e: Exception) {
+                                Log.e("PostEditScreen", "Error uploading image: ${e.message}", e)
+                                Toast.makeText(context, "이미지 업로드 중 오류 발생", Toast.LENGTH_SHORT).show()
+                                return@launch
+                            }
+                        }
+
                         if (postId.isNullOrEmpty()) {
                             // Create new post
                             val newPost = Post(
                                 title = title.value,
                                 content = content.value,
                                 author = author.value,
-                                category = selectedCategory // Add category
+                                authorId = currentUser?.uid ?: "",
+                                category = selectedCategory,
+                                imageUrl = uploadedImageUrl // 업로드된 이미지 URL 저장
                             )
-                            postRepository.addPost(newPost)
+                            postRepository.addOrUpdatePost(newPost) // addOrUpdatePost 사용
+                            currentUser?.uid?.let { uid ->
+                                userRepository.updatePoints(uid, 10L)
+                            }
                         } else {
                             // Update existing post
                             val updatedPost = Post(
@@ -143,10 +210,12 @@ fun PostEditScreen(postId: String?, postRepository: PostRepository = PostReposit
                                 title = title.value,
                                 content = content.value,
                                 author = author.value,
-                                timestamp = postRepository.getPost(postId)?.timestamp ?: System.currentTimeMillis(),
-                                category = selectedCategory // Add category
+                                authorId = originalAuthorId, // Use the stored originalAuthorId
+                                timestamp = originalTimestamp, // Use the stored originalTimestamp
+                                category = selectedCategory,
+                                imageUrl = uploadedImageUrl // 업로드된 이미지 URL 저장
                             )
-                            postRepository.updatePost(updatedPost)
+                            postRepository.addOrUpdatePost(updatedPost) // addOrUpdatePost 사용
                         }
                         onBack()
                     }

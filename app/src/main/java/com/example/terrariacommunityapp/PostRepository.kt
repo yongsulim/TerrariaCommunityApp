@@ -2,38 +2,45 @@ package com.example.terrariacommunityapp
 
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.tasks.await
+import android.util.Log
+import android.net.Uri
 
 class PostRepository {
     private val db = FirebaseFirestore.getInstance()
     private val postsCollection = db.collection("posts")
+    private val storage = FirebaseStorage.getInstance()
 
-    // 게시물 생성
-    suspend fun addPost(post: Post): String? {
+    // 게시물 추가 또는 업데이트
+    suspend fun addOrUpdatePost(post: Post): Boolean {
         return try {
-            val newDocRef = postsCollection.add(post).await()
-            // Firestore document ID를 Post 객체에 저장하기 위해 업데이트
-            postsCollection.document(newDocRef.id).update("id", newDocRef.id).await()
-            newDocRef.id
+            if (post.id.isEmpty()) {
+                val newDocRef = postsCollection.add(post).await()
+                postsCollection.document(newDocRef.id).update("id", newDocRef.id).await()
+            } else {
+                postsCollection.document(post.id).set(post).await()
+            }
+            true
         } catch (e: Exception) {
             e.printStackTrace()
-            null
+            false
         }
     }
 
-    // 모든 게시물 조회 (최신순) 또는 특정 카테고리 게시물 조회
-    suspend fun getPosts(category: String? = null): List<Post> {
+    // 이미지 업로드
+    suspend fun uploadImage(imageUri: Uri): String? {
         return try {
-            var query: Query = postsCollection.orderBy("timestamp", Query.Direction.DESCENDING)
-            if (!category.isNullOrBlank()) {
-                query = query.whereEqualTo("category", category)
-            }
-            query.get()
-                .await()
-                .toObjects(Post::class.java)
+            val storageRef = storage.reference
+            val imageName = "images/${System.currentTimeMillis()}_${imageUri.lastPathSegment}"
+            val imageRef = storageRef.child(imageName)
+
+            imageRef.putFile(imageUri).await()
+            val downloadUrl = imageRef.downloadUrl.await()
+            downloadUrl.toString()
         } catch (e: Exception) {
-            e.printStackTrace()
-            emptyList()
+            Log.e("PostRepository", "Error uploading image: ${e.message}", e)
+            null
         }
     }
 
@@ -47,14 +54,34 @@ class PostRepository {
         }
     }
 
-    // 게시물 업데이트
-    suspend fun updatePost(post: Post): Boolean {
+    // 모든 게시물 조회 (최신순)
+    suspend fun getPosts(category: String? = null): List<Post> {
         return try {
-            postsCollection.document(post.id).set(post).await()
-            true
+            var query: Query = postsCollection
+            if (category != null && category != "전체") {
+                query = query.whereEqualTo("category", category)
+            }
+            query.orderBy("timestamp", Query.Direction.DESCENDING)
+                .get()
+                .await()
+                .toObjects(Post::class.java)
         } catch (e: Exception) {
             e.printStackTrace()
-            false
+            emptyList()
+        }
+    }
+
+    // 인기 게시물 조회 (좋아요 수 기준 상위 10개)
+    suspend fun getPopularPosts(): List<Post> {
+        return try {
+            postsCollection.orderBy("likesCount", Query.Direction.DESCENDING)
+                .limit(10)
+                .get()
+                .await()
+                .toObjects(Post::class.java)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
         }
     }
 
@@ -69,6 +96,26 @@ class PostRepository {
         }
     }
 
+    // 게시물 검색
+    suspend fun searchPosts(query: String, category: String? = null): List<Post> {
+        return try {
+            var baseQuery = postsCollection.orderBy("timestamp", Query.Direction.DESCENDING)
+            if (category != null && category != "전체") {
+                baseQuery = baseQuery.whereEqualTo("category", category)
+            }
+            val results = baseQuery
+                .get()
+                .await()
+                .toObjects(Post::class.java)
+
+            // 클라이언트 측에서 제목 또는 내용에 검색어가 포함된 게시물 필터링
+            results.filter { it.title.contains(query, ignoreCase = true) || it.content.contains(query, ignoreCase = true) }
+        } catch (e: Exception) {
+            Log.e("PostRepository", "Error searching posts: ${e.message}", e)
+            emptyList()
+        }
+    }
+
     // 게시물 좋아요 토글
     suspend fun togglePostLike(postId: String, userId: String): Boolean {
         return try {
@@ -76,12 +123,12 @@ class PostRepository {
             db.runTransaction { transaction ->
                 val snapshot = transaction.get(postRef)
                 @Suppress("UNCHECKED_CAST")
-                val likedBy: List<String> = snapshot.get("likedBy") as? List<String> ?: emptyList()
-                val newLikesCount = if (likedBy.contains(userId)) {
-                    transaction.update(postRef, "likedBy", likedBy - userId)
+                val likes: List<String> = snapshot.get("likedBy") as? List<String> ?: emptyList()
+                val newLikesCount = if (likes.contains(userId)) {
+                    transaction.update(postRef, "likedBy", likes - userId)
                     snapshot.getLong("likesCount")?.minus(1) ?: 0
                 } else {
-                    transaction.update(postRef, "likedBy", likedBy + userId)
+                    transaction.update(postRef, "likedBy", likes + userId)
                     snapshot.getLong("likesCount")?.plus(1) ?: 0
                 }
                 transaction.update(postRef, "likesCount", newLikesCount)
@@ -90,38 +137,6 @@ class PostRepository {
         } catch (e: Exception) {
             e.printStackTrace()
             false
-        }
-    }
-
-    // 인기 게시물 조회 (좋아요 수 기준 내림차순)
-    suspend fun getPopularPosts(): List<Post> {
-        return try {
-            postsCollection.orderBy("likesCount", Query.Direction.DESCENDING)
-                .limit(10) // 상위 10개 게시물만 가져오기 (원하는 개수로 조절 가능)
-                .get()
-                .await()
-                .toObjects(Post::class.java)
-        } catch (e: Exception) {
-            e.printStackTrace()
-            emptyList()
-        }
-    }
-
-    // 게시물 검색 (제목 또는 내용)
-    suspend fun searchPosts(query: String, category: String? = null): List<Post> {
-        return try {
-            val allPosts = getPosts(category) // 카테고리 필터링된 모든 게시물을 가져옴
-            if (query.isBlank()) {
-                allPosts
-            } else {
-                allPosts.filter { post ->
-                    post.title.contains(query, ignoreCase = true) ||
-                            post.content.contains(query, ignoreCase = true)
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            emptyList()
         }
     }
 } 

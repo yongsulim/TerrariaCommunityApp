@@ -3,83 +3,54 @@ package com.example.terrariacommunityapp
 import android.content.ContentValues.TAG
 import android.os.Bundle
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import com.example.terrariacommunityapp.ui.theme.TerrariaCommunityAppTheme
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInClient
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.GoogleAuthProvider
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import com.google.android.gms.common.api.ApiException
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
-import androidx.navigation.NavType
-import androidx.navigation.navArgument
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
-import com.google.firebase.messaging.FirebaseMessaging
-import com.navercorp.nid.NaverIdLoginSDK
-import com.navercorp.nid.oauth.OAuthLoginCallback
-import com.google.firebase.auth.OAuthProvider
-import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.lifecycleScope
-import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.material3.MaterialTheme
-import com.google.firebase.auth.ktx.auth
-import com.google.firebase.ktx.Firebase
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.NavController
-import androidx.compose.runtime.getValue
-import androidx.compose.material3.Icon
-import com.example.terrariacommunityapp.BoardScreen
-import com.example.terrariacommunityapp.PostDetailScreen
-import com.example.terrariacommunityapp.PostEditScreen
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.Switch
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.ListItem
-import com.google.android.gms.ads.MobileAds
-import com.google.android.gms.ads.AdView
-import com.google.android.gms.ads.AdSize
-import com.google.android.gms.ads.AdRequest
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.ui.platform.LocalDensity
+import androidx.lifecycle.lifecycleScope
+import androidx.navigation.NavController
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.example.terrariacommunityapp.ui.theme.TerrariaCommunityAppTheme
+import com.google.android.gms.ads.AdRequest
+import com.google.android.gms.ads.AdSize
+import com.google.android.gms.ads.AdView
+import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.interstitial.InterstitialAd
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
-import com.google.android.gms.ads.FullScreenContentCallback
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.UserProfileChangeRequest
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.ktx.Firebase
+import com.google.firebase.messaging.FirebaseMessaging
+import com.navercorp.nid.NaverIdLoginSDK
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     object Board : Screen("board", "게시판", Icons.Filled.Home)
@@ -90,6 +61,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var googleSignInClient: GoogleSignInClient
     private lateinit var firebaseAuth: FirebaseAuth
     private val postRepository = PostRepository()
+    private val userRepository = UserRepository()
     private val posts = mutableStateListOf<Post>()
     private val popularPosts = mutableStateListOf<Post>()
     private var mInterstitialAd: InterstitialAd? = null
@@ -124,6 +96,14 @@ class MainActivity : ComponentActivity() {
             val token = task.result
             // Log and toast
             Log.d(TAG, "FCM Registration Token: $token")
+            // Update user's FCM token in Firestore
+            firebaseAuth.currentUser?.uid?.let { uid ->
+                lifecycleScope.launch {
+                    val user = userRepository.getUser(uid)
+                    val updatedUser = user?.copy(fcmToken = token) ?: User(uid = uid, displayName = firebaseAuth.currentUser?.displayName ?: "알 수 없음", fcmToken = token)
+                    userRepository.createUserOrUpdate(updatedUser)
+                }
+            }
         }
 
         // Initialize Google Mobile Ads SDK
@@ -140,7 +120,7 @@ class MainActivity : ComponentActivity() {
 
             TerrariaCommunityAppTheme(darkTheme = darkTheme) { // Pass the darkTheme state
                 val navController = rememberNavController()
-                val coroutineScope = rememberCoroutineScope()
+                val coroutineScope = rememberCoroutineScope() // Compose scope
                 val currentBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = currentBackStackEntry?.destination?.route
                 var showBottomBar by remember { mutableStateOf(false) }
@@ -218,7 +198,9 @@ class MainActivity : ComponentActivity() {
                             SettingsScreen(
                                 modifier = Modifier.fillMaxSize(),
                                 currentDarkTheme = darkTheme, // Pass current theme state
-                                onToggleTheme = { darkTheme = it } // Pass callback to toggle theme
+                                onToggleTheme = { darkTheme = it }, // Pass callback to toggle theme
+                                firebaseAuth = firebaseAuth,
+                                userRepository = userRepository // 인스턴스 전달
                             )
                         }
                         composable(
@@ -233,7 +215,7 @@ class MainActivity : ComponentActivity() {
                                     onBack = { navController.popBackStack() },
                                     onEditPost = { editPostId -> navController.navigate("post_edit/$editPostId") },
                                     onDeletePost = {
-                                        coroutineScope.launch {
+                                        coroutineScope.launch { // Use Compose coroutineScope
                                             postRepository.deletePost(postId)
                                             refreshPosts()
                                             navController.popBackStack() // Go back after delete
@@ -295,7 +277,7 @@ class MainActivity : ComponentActivity() {
             override fun onAdLoaded(interstitialAd: InterstitialAd) {
                 mInterstitialAd = interstitialAd
                 Log.d(TAG, "Interstitial Ad was loaded.")
-                mInterstitialAd?.fullScreenContentCallback = object: FullScreenContentCallback() {
+                mInterstitialAd?.fullScreenContentCallback = object: com.google.android.gms.ads.FullScreenContentCallback() {
                     override fun onAdDismissedFullScreenContent() {
                         Log.d(TAG, "Ad was dismissed.")
                         mInterstitialAd = null
@@ -382,7 +364,18 @@ fun LoginScreen(modifier: Modifier = Modifier, googleSignInClient: GoogleSignInC
 }
 
 @Composable
-fun SettingsScreen(modifier: Modifier = Modifier, currentDarkTheme: Boolean, onToggleTheme: (Boolean) -> Unit) {
+fun SettingsScreen(modifier: Modifier = Modifier, currentDarkTheme: Boolean, onToggleTheme: (Boolean) -> Unit, firebaseAuth: FirebaseAuth, userRepository: UserRepository) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    var nickname by remember { mutableStateOf(firebaseAuth.currentUser?.displayName ?: "게스트") }
+    var currentUserData by remember { mutableStateOf<User?>(null) }
+
+    LaunchedEffect(firebaseAuth.currentUser?.uid) {
+        firebaseAuth.currentUser?.uid?.let { uid ->
+            currentUserData = userRepository.getUser(uid)
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -404,6 +397,53 @@ fun SettingsScreen(modifier: Modifier = Modifier, currentDarkTheme: Boolean, onT
                 onCheckedChange = { onToggleTheme(it) }
             )
         }
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(text = "닉네임 관리", style = MaterialTheme.typography.titleLarge)
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = nickname,
+            onValueChange = { nickname = it },
+            label = { Text("닉네임") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Button(
+            onClick = {
+                coroutineScope.launch {
+                    val user = firebaseAuth.currentUser
+                    if (user != null) {
+                        val profileUpdates = UserProfileChangeRequest.Builder()
+                            .setDisplayName(nickname)
+                            .build()
+                        try {
+                            user.updateProfile(profileUpdates).await()
+                            Log.d(TAG, "User profile updated.")
+                            val updatedUser = User(uid = user.uid, displayName = nickname, points = currentUserData?.points ?: 0L, badges = currentUserData?.badges ?: emptyList())
+                            userRepository.createUserOrUpdate(updatedUser)
+                            currentUserData = updatedUser
+                            Toast.makeText(context, "닉네임이 업데이트되었습니다.", Toast.LENGTH_SHORT).show()
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Error updating profile.", e)
+                            Toast.makeText(context, "닉네임 업데이트 실패: ${e.message}", Toast.LENGTH_LONG).show()
+                        }
+                    } else {
+                        Toast.makeText(context, "로그인된 사용자가 없습니다.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("닉네임 저장")
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(text = "활동 정보", style = MaterialTheme.typography.titleLarge)
+        Spacer(modifier = Modifier.height(8.dp))
+        currentUserData?.let { user ->
+            Text(text = "포인트: ${user.points}", style = MaterialTheme.typography.bodyLarge)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(text = "뱃지: ${if (user.badges.isEmpty()) "없음" else user.badges.joinToString()}", style = MaterialTheme.typography.bodyLarge)
+        } ?: Text(text = "사용자 정보를 불러오는 중...", style = MaterialTheme.typography.bodyLarge)
     }
 }
 

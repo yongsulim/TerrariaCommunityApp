@@ -3,10 +3,10 @@ const express = require('express');
 const admin = require('firebase-admin');
 const axios = require('axios'); // 네이버 토큰 유효성 검증을 위해 필요
 
-// Firebase 서비스 계정 키 경로 (방금 다운로드한 파일 경로로 변경하세요!)
-const serviceAccount = require('./serviceAccountKey.json'); // 예: './serviceAccountKey.json'
+// Firebase Admin SDK 초기화 (서비스 계정 키 경로 지정)
+// TODO: Firebase Console에서 서비스 계정 키 JSON 파일을 다운로드하여 'backend-server/' 디렉토리에 저장하고 경로를 업데이트하세요.
+const serviceAccount = require('./serviceAccountKey.json'); 
 
-// Firebase Admin SDK 초기화
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 });
@@ -53,6 +53,32 @@ app.post('/verifyNaverToken', async (req, res) => {
         }
         res.status(500).send('서버 오류 발생');
     }
+});
+
+// 알림 전송 엔드포인트
+app.post('/sendNotification', async (req, res) => {
+  const { token, title, body } = req.body;
+
+  if (!token || !title || !body) {
+    return res.status(400).send('Missing required fields: token, title, or body');
+  }
+
+  const message = {
+    notification: {
+      title: title,
+      body: body,
+    },
+    token: token,
+  };
+
+  try {
+    const response = await admin.messaging().send(message);
+    console.log('Successfully sent message:', response);
+    res.status(200).send('Notification sent successfully');
+  } catch (error) {
+    console.error('Error sending message:', error);
+    res.status(500).send('Error sending notification');
+  }
 });
 
 app.listen(PORT, () => {
