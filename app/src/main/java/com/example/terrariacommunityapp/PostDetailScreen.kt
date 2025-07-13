@@ -16,12 +16,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Button
-import androidx.compose.material3.Divider
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.res.painterResource
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
+import io.github.kevinnzou.compose.webview.WebView
+import io.github.kevinnzou.compose.webview.rememberWebViewStateWithHTMLData
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,6 +85,46 @@ fun PostDetailScreen(postId: String, postRepository: PostRepository = PostReposi
                 Text(text = p.content, style = MaterialTheme.typography.bodyLarge)
                 Spacer(modifier = Modifier.height(8.dp))
 
+                // 이미지 미리보기 (기존 코드)
+                p.imageUrl?.let { imageUrl ->
+                    AsyncImage(
+                        model = imageUrl,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp),
+                        contentScale = ContentScale.Crop
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                // 비디오 임베드 (새로 추가)
+                p.videoUrl?.let { videoUrl ->
+                    val videoId = extractYouTubeVideoId(videoUrl)
+                    if (!videoId.isNullOrBlank()) {
+                        val html = """
+                            <html>
+                            <body style="margin:0; padding:0;">
+                            <iframe width="100%" height="100%" src="https://www.youtube.com/embed/$videoId" frameborder="0" allowfullscreen></iframe>
+                            </body>
+                            </html>
+                        """.trimIndent()
+
+                        val webViewState = rememberWebViewStateWithHTMLData(html)
+
+                        WebView(
+                            state = webViewState,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(200.dp), // 동영상 높이 고정
+                            onCreated = { webView ->
+                                webView.settings.javaScriptEnabled = true
+                            }
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+                }
+
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val isLiked = p.likedBy.contains(currentUserUid)
                     IconButton(onClick = {
@@ -101,7 +144,7 @@ fun PostDetailScreen(postId: String, postRepository: PostRepository = PostReposi
                     Text(text = "${p.likesCount}")
                 }
 
-                Divider(modifier = Modifier.padding(vertical = 16.dp))
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
                 OutlinedTextField(
                     value = newCommentContent.value,
@@ -205,4 +248,10 @@ fun CommentItem(
             Text(text = "${comment.likesCount}")
         }
     }
+}
+
+private fun extractYouTubeVideoId(url: String): String? {
+    val regex = """(?<=watch\?v=|/videos/|embed\/|youtu.be\/|\/v\/|\/e\/|watch\?v%3D|watch\?feature=player_embedded&v=|%2Fvideos%2F|embedCEmbedCEmbedC|youtu.be%2F|%2Fv\/|eEmbedCEmbedC)([^#\&\?\n]*)""".trimIndent().toRegex()
+    val matchResult = regex.find(url)
+    return matchResult?.value
 }

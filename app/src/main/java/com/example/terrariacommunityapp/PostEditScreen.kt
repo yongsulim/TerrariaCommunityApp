@@ -42,6 +42,7 @@ fun PostEditScreen(postId: String?, postRepository: PostRepository = PostReposit
     var originalAuthorId by remember { mutableStateOf("") } // To store authorId of existing post
     var originalTimestamp by remember { mutableStateOf(System.currentTimeMillis()) } // To store timestamp of existing post
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) } // 선택된 이미지 URI 상태
+    val videoUrl = remember { mutableStateOf("") } // 비디오 URL 상태 추가
 
     val imagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         selectedImageUri = uri
@@ -59,6 +60,7 @@ fun PostEditScreen(postId: String?, postRepository: PostRepository = PostReposit
                     originalAuthorId = it.authorId // Store existing authorId
                     originalTimestamp = it.timestamp // Store existing timestamp
                     selectedImageUri = it.imageUrl?.let { Uri.parse(it) } // 기존 이미지 URL 로드
+                    videoUrl.value = it.videoUrl ?: "" // 기존 비디오 URL 로드
                 }
             }
         } else {
@@ -162,6 +164,13 @@ fun PostEditScreen(postId: String?, postRepository: PostRepository = PostReposit
                 label = { Text("내용") },
                 modifier = Modifier.fillMaxWidth().weight(1f)
             )
+
+            OutlinedTextField(
+                value = videoUrl.value,
+                onValueChange = { videoUrl.value = it },
+                label = { Text("비디오 URL (선택 사항)") },
+                modifier = Modifier.fillMaxWidth()
+            )
             OutlinedTextField(
                 value = author.value,
                 onValueChange = { author.value = it },
@@ -197,7 +206,8 @@ fun PostEditScreen(postId: String?, postRepository: PostRepository = PostReposit
                                 author = author.value,
                                 authorId = currentUser?.uid ?: "",
                                 category = selectedCategory,
-                                imageUrl = uploadedImageUrl // 업로드된 이미지 URL 저장
+                                imageUrl = uploadedImageUrl, // 업로드된 이미지 URL 저장
+                                videoUrl = videoUrl.value.ifBlank { null } // 비디오 URL 저장
                             )
                             postRepository.addOrUpdatePost(newPost) // addOrUpdatePost 사용
                             currentUser?.uid?.let { uid ->
@@ -213,7 +223,8 @@ fun PostEditScreen(postId: String?, postRepository: PostRepository = PostReposit
                                 authorId = originalAuthorId, // Use the stored originalAuthorId
                                 timestamp = originalTimestamp, // Use the stored originalTimestamp
                                 category = selectedCategory,
-                                imageUrl = uploadedImageUrl // 업로드된 이미지 URL 저장
+                                imageUrl = uploadedImageUrl, // 업로드된 이미지 URL 저장
+                                videoUrl = videoUrl.value.ifBlank { null } // 비디오 URL 저장
                             )
                             postRepository.addOrUpdatePost(updatedPost) // addOrUpdatePost 사용
                         }

@@ -10,5 +10,6 @@ data class Post(
     val category: String = "자유",
     val likesCount: Long = 0,
     val likedBy: List<String> = emptyList(),
-    val imageUrl: String? = null
+    val imageUrl: String? = null,
+    val videoUrl: String? = null
 ) 
