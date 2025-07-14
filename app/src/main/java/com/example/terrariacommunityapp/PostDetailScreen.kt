@@ -23,8 +23,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.res.painterResource
 import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
-import io.github.kevinnzou.compose.webview.WebView
-import io.github.kevinnzou.compose.webview.rememberWebViewStateWithHTMLData
+import androidx.compose.ui.viewinterop.AndroidView
+import android.webkit.WebView
+import android.webkit.WebViewClient
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -98,29 +99,11 @@ fun PostDetailScreen(postId: String, postRepository: PostRepository = PostReposi
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                // 비디오 임베드 (새로 추가)
+                // 비디오 임베드 (AndroidView로 교체)
                 p.videoUrl?.let { videoUrl ->
                     val videoId = extractYouTubeVideoId(videoUrl)
                     if (!videoId.isNullOrBlank()) {
-                        val html = """
-                            <html>
-                            <body style="margin:0; padding:0;">
-                            <iframe width="100%" height="100%" src="https://www.youtube.com/embed/$videoId" frameborder="0" allowfullscreen></iframe>
-                            </body>
-                            </html>
-                        """.trimIndent()
-
-                        val webViewState = rememberWebViewStateWithHTMLData(html)
-
-                        WebView(
-                            state = webViewState,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(200.dp), // 동영상 높이 고정
-                            onCreated = { webView ->
-                                webView.settings.javaScriptEnabled = true
-                            }
-                        )
+                        YoutubeWebView(videoId)
                         Spacer(modifier = Modifier.height(16.dp))
                     }
                 }
@@ -216,37 +199,137 @@ fun CommentItem(
     onCommentUpdated: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
-    Row(
+    var showEditDialog by remember { mutableStateOf(false) }
+    var editContent by remember { mutableStateOf(comment.content) }
+    
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(vertical = 8.dp)
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = comment.author, style = MaterialTheme.typography.titleSmall)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(text = comment.content, style = MaterialTheme.typography.bodyMedium)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(text = "날짜: ${SimpleDateFormat("yyyy.MM.dd HH:mm", Locale.getDefault()).format(Date(comment.timestamp))}", style = MaterialTheme.typography.bodySmall)
-        }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            val isLiked = comment.likedBy.contains(currentUserUid)
-            IconButton(onClick = {
-                currentUserUid?.let { uid ->
-                    coroutineScope.launch {
-                        commentRepository.toggleCommentLike(comment.id, uid)
-                        onCommentUpdated()
-                    }
-                }
-            }) {
-                Icon(
-                    painterResource(id = if (isLiked) R.drawable.ic_thumb_up else R.drawable.ic_thumb_down),
-                    contentDescription = "댓글 좋아요",
-                    tint = if (isLiked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = comment.author, style = MaterialTheme.typography.titleSmall)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(text = comment.content, style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "날짜: ${SimpleDateFormat("yyyy.MM.dd HH:mm", Locale.getDefault()).format(Date(comment.timestamp))}", 
+                    style = MaterialTheme.typography.bodySmall
                 )
             }
-            Text(text = "${comment.likesCount}")
+            
+            // 댓글 액션 버튼들
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // 좋아요 버튼
+                val isLiked = comment.likedBy.contains(currentUserUid)
+                IconButton(
+                    onClick = {
+                        currentUserUid?.let { uid ->
+                            coroutineScope.launch {
+                                commentRepository.toggleCommentLike(comment.id, uid)
+                                onCommentUpdated()
+                            }
+                        }
+                    }
+                ) {
+                    Icon(
+                        painterResource(id = R.drawable.ic_thumb_up),
+                        contentDescription = "댓글 좋아요",
+                        tint = if (isLiked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                Text(text = "${comment.likesCount}", style = MaterialTheme.typography.bodySmall)
+                
+                Spacer(modifier = Modifier.width(8.dp))
+                
+                // 싫어요 버튼
+                val isDisliked = comment.dislikedBy.contains(currentUserUid)
+                IconButton(
+                    onClick = {
+                        currentUserUid?.let { uid ->
+                            coroutineScope.launch {
+                                commentRepository.toggleCommentDislike(comment.id, uid)
+                                onCommentUpdated()
+                            }
+                        }
+                    }
+                ) {
+                    Icon(
+                        painterResource(id = R.drawable.ic_thumb_down),
+                        contentDescription = "댓글 싫어요",
+                        tint = if (isDisliked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                Text(text = "${comment.dislikedBy.size}", style = MaterialTheme.typography.bodySmall)
+                
+                // 댓글 작성자인 경우 수정/삭제 버튼 표시
+                if (comment.author == (Firebase.auth.currentUser?.displayName ?: "알 수 없음")) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    // 수정 버튼
+                    IconButton(onClick = { showEditDialog = true }) {
+                        Icon(
+                            painterResource(id = R.drawable.ic_edit),
+                            contentDescription = "댓글 수정"
+                        )
+                    }
+                    
+                    // 삭제 버튼
+                    IconButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                commentRepository.deleteComment(comment.id)
+                                onCommentUpdated()
+                            }
+                        }
+                    ) {
+                        Icon(
+                            painterResource(id = R.drawable.ic_delete),
+                            contentDescription = "댓글 삭제"
+                        )
+                    }
+                }
+            }
         }
+    }
+    
+    // 댓글 수정 다이얼로그
+    if (showEditDialog) {
+        AlertDialog(
+            onDismissRequest = { showEditDialog = false },
+            title = { Text("댓글 수정") },
+            text = {
+                OutlinedTextField(
+                    value = editContent,
+                    onValueChange = { editContent = it },
+                    label = { Text("댓글 내용") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        coroutineScope.launch {
+                            commentRepository.updateComment(comment.id, editContent)
+                            onCommentUpdated()
+                            showEditDialog = false
+                        }
+                    }
+                ) {
+                    Text("수정")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditDialog = false }) {
+                    Text("취소")
+                }
+            }
+        )
     }
 }
 
@@ -254,4 +337,27 @@ private fun extractYouTubeVideoId(url: String): String? {
     val regex = """(?<=watch\?v=|/videos/|embed\/|youtu.be\/|\/v\/|\/e\/|watch\?v%3D|watch\?feature=player_embedded&v=|%2Fvideos%2F|embedCEmbedCEmbedC|youtu.be%2F|%2Fv\/|eEmbedCEmbedC)([^#\&\?\n]*)""".trimIndent().toRegex()
     val matchResult = regex.find(url)
     return matchResult?.value
+}
+
+@Composable
+fun YoutubeWebView(videoId: String) {
+    val html = """
+        <html>
+        <body style=\"margin:0; padding:0;\">
+        <iframe width=\"100%\" height=\"100%\" src=\"https://www.youtube.com/embed/$videoId\" frameborder=\"0\" allowfullscreen></iframe>
+        </body>
+        </html>
+    """.trimIndent()
+    AndroidView(
+        factory = { context ->
+            WebView(context).apply {
+                webViewClient = WebViewClient()
+                settings.javaScriptEnabled = true
+                loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+            }
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(200.dp)
+    )
 }

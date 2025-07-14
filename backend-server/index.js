@@ -78,7 +78,7 @@ app.post('/sendNotification', async (req, res) => {
   } catch (error) {
     console.error('Error sending message:', error);
     res.status(500).send('Error sending notification');
-  }
+    }
 });
 
 app.listen(PORT, () => {

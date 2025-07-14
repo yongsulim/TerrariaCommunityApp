@@ -6,18 +6,24 @@ import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.tasks.await
 import android.util.Log
 import android.net.Uri
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.MediaType.Companion.toMediaType
+import org.json.JSONObject
 
 class PostRepository {
     private val db = FirebaseFirestore.getInstance()
     private val postsCollection = db.collection("posts")
     private val storage = FirebaseStorage.getInstance()
+    private val client = OkHttpClient()
 
     // 게시물 추가 또는 업데이트
     suspend fun addOrUpdatePost(post: Post): Boolean {
         return try {
             if (post.id.isEmpty()) {
-                val newDocRef = postsCollection.add(post).await()
-                postsCollection.document(newDocRef.id).update("id", newDocRef.id).await()
+            val newDocRef = postsCollection.add(post).await()
+            postsCollection.document(newDocRef.id).update("id", newDocRef.id).await()
             } else {
                 postsCollection.document(post.id).set(post).await()
             }
@@ -120,7 +126,7 @@ class PostRepository {
     suspend fun togglePostLike(postId: String, userId: String): Boolean {
         return try {
             val postRef = postsCollection.document(postId)
-            db.runTransaction { transaction ->
+            val newLikesCount = db.runTransaction { transaction ->
                 val snapshot = transaction.get(postRef)
                 @Suppress("UNCHECKED_CAST")
                 val likes: List<String> = snapshot.get("likedBy") as? List<String> ?: emptyList()
@@ -132,11 +138,94 @@ class PostRepository {
                     snapshot.getLong("likesCount")?.plus(1) ?: 0
                 }
                 transaction.update(postRef, "likesCount", newLikesCount)
+                newLikesCount
             }.await()
+            
+            // 인기글 선정 알림 체크
+            checkAndSendPopularPostNotification(postId, newLikesCount)
+            
             true
         } catch (e: Exception) {
             e.printStackTrace()
             false
+        }
+    }
+
+    // 내가 작성한 글 목록 조회
+    suspend fun getPostsByAuthorId(authorId: String): List<Post> {
+        return try {
+            postsCollection.whereEqualTo("authorId", authorId)
+                .orderBy("timestamp", Query.Direction.DESCENDING)
+                .get()
+                .await()
+                .toObjects(Post::class.java)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+    // 사용자가 좋아요(즐겨찾기)한 글 목록 조회
+    suspend fun getFavoritePostsByUserId(userId: String): List<Post> {
+        return try {
+            postsCollection.whereArrayContains("likedBy", userId)
+                .orderBy("timestamp", Query.Direction.DESCENDING)
+                .get()
+                .await()
+                .toObjects(Post::class.java)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+    // 인기글 선정 알림 (좋아요 수 기준)
+    suspend fun checkAndSendPopularPostNotification(postId: String, currentLikesCount: Long) {
+        val POPULAR_THRESHOLD = 10L // 인기글 기준 (좋아요 10개)
+        
+        if (currentLikesCount >= POPULAR_THRESHOLD) {
+            try {
+                val post = getPost(postId)
+                post?.let { p ->
+                    // 게시물 작성자에게 인기글 선정 알림
+                    val postAuthorUid = p.authorId
+                    if (postAuthorUid.isNotEmpty()) {
+                        val userRepository = UserRepository()
+                        val recipientUser = userRepository.getUser(postAuthorUid)
+                        val recipientFcmToken = recipientUser?.fcmToken
+
+                        if (recipientFcmToken != null) {
+                            sendNotificationToBackend(
+                                recipientFcmToken,
+                                "인기글 선정!",
+                                "${p.title}이 인기글에 선정되었습니다!"
+                            )
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("PostRepository", "Error sending popular post notification: ${e.message}", e)
+            }
+        }
+    }
+
+    private suspend fun sendNotificationToBackend(token: String, title: String, body: String) {
+        try {
+            val json = JSONObject()
+            json.put("token", token)
+            json.put("title", title)
+            json.put("body", body)
+
+            val requestBody = json.toString().toRequestBody("application/json".toMediaType())
+            val request = Request.Builder()
+                .url("https://your-backend-url.com/send-notification") // 실제 백엔드 URL로 변경 필요
+                .post(requestBody)
+                .build()
+
+            val response = client.newCall(request).execute()
+            Log.d("PostRepository", "Notification response: ${response.body?.string()}")
+        } catch (e: Exception) {
+            Log.e("PostRepository", "Error sending notification to backend: ${e.message}", e)
         }
     }
 } 

@@ -33,8 +33,8 @@ fun BoardScreen(
     searchQuery: String,
     onSearchQueryChanged: (String) -> Unit
 ) {
-    val categories = listOf("모두", "공지", "질문", "자유")
-    var selectedCategory by remember { mutableStateOf<String?>(null) }
+    val categories = listOf("질문", "팁", "갤러리")
+    var selectedCategory by remember { mutableStateOf<String?>(categories[0]) }
     val tabs = listOf("최신글", "인기글")
     var selectedTab by remember { mutableStateOf(tabs[0]) }
 
@@ -62,11 +62,10 @@ fun BoardScreen(
             ) {
                 items(categories) { category ->
                     FilterChip(
-                        selected = selectedCategory == category || (selectedCategory == null && category == "모두"),
+                        selected = selectedCategory == category,
                         onClick = {
-                            val newCategory = if (category == "모두") null else category
-                            selectedCategory = newCategory
-                            onCategorySelected(newCategory, selectedTab)
+                            selectedCategory = category
+                            onCategorySelected(category, selectedTab)
                         },
                         label = { Text(category) }
                     )

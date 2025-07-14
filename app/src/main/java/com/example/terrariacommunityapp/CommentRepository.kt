@@ -92,15 +92,64 @@ class CommentRepository {
                 val snapshot = transaction.get(commentRef)
                 @Suppress("UNCHECKED_CAST")
                 val likes: List<String> = snapshot.get("likedBy") as? List<String> ?: emptyList()
+                val dislikes: List<String> = snapshot.get("dislikedBy") as? List<String> ?: emptyList()
+                
                 val newLikesCount = if (likes.contains(userId)) {
+                    // 좋아요 취소
                     transaction.update(commentRef, "likedBy", likes - userId)
                     snapshot.getLong("likesCount")?.minus(1) ?: 0
                 } else {
-                    transaction.update(commentRef, "likedBy", likes + userId)
+                    // 좋아요 추가 (싫어요가 있다면 제거)
+                    val newLikes = likes + userId
+                    val newDislikes = dislikes - userId
+                    transaction.update(commentRef, "likedBy", newLikes)
+                    transaction.update(commentRef, "dislikedBy", newDislikes)
                     snapshot.getLong("likesCount")?.plus(1) ?: 0
                 }
                 transaction.update(commentRef, "likesCount", newLikesCount)
             }.await()
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    // 댓글 싫어요 토글
+    suspend fun toggleCommentDislike(commentId: String, userId: String): Boolean {
+        return try {
+            val commentRef = commentsCollection.document(commentId)
+            db.runTransaction { transaction ->
+                val snapshot = transaction.get(commentRef)
+                @Suppress("UNCHECKED_CAST")
+                val likes: List<String> = snapshot.get("likedBy") as? List<String> ?: emptyList()
+                val dislikes: List<String> = snapshot.get("dislikedBy") as? List<String> ?: emptyList()
+                
+                val newLikesCount = if (dislikes.contains(userId)) {
+                    // 싫어요 취소
+                    transaction.update(commentRef, "dislikedBy", dislikes - userId)
+                    snapshot.getLong("likesCount") ?: 0
+                } else {
+                    // 싫어요 추가 (좋아요가 있다면 제거)
+                    val newDislikes = dislikes + userId
+                    val newLikes = likes - userId
+                    transaction.update(commentRef, "dislikedBy", newDislikes)
+                    transaction.update(commentRef, "likedBy", newLikes)
+                    snapshot.getLong("likesCount")?.minus(1) ?: 0
+                }
+                transaction.update(commentRef, "likesCount", newLikesCount)
+            }.await()
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    // 댓글 수정
+    suspend fun updateComment(commentId: String, newContent: String): Boolean {
+        return try {
+            commentsCollection.document(commentId).update("content", newContent).await()
             true
         } catch (e: Exception) {
             e.printStackTrace()

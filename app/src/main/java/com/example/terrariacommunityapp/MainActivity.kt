@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -51,10 +54,28 @@ import com.google.firebase.messaging.FirebaseMessaging
 import com.navercorp.nid.NaverIdLoginSDK
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material.icons.filled.Article
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.PhotoCamera
+import android.net.Uri
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Notifications
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     object Board : Screen("board", "게시판", Icons.Filled.Home)
-    object Settings : Screen("settings", "설정", Icons.Filled.Settings)
+    object Search : Screen("search", "검색", Icons.Filled.Search)
+    object Favorite : Screen("favorite", "즐겨찾기", Icons.Filled.Favorite)
+    object MyPage : Screen("mypage", "마이페이지", Icons.Filled.Person)
+    object Settings : Screen("settings", "설정", Icons.Filled.Settings) // 기존 유지(마이페이지에서 이동 가능)
 }
 
 class MainActivity : ComponentActivity() {
@@ -128,28 +149,26 @@ class MainActivity : ComponentActivity() {
                 Scaffold(
                     bottomBar = {
                         if (showBottomBar) { // Use the state variable here
-                            Column {
-                                NavigationBar {
-                                    val items = listOf(Screen.Board, Screen.Settings)
-                                    items.forEach { screen ->
-                                        NavigationBarItem(
-                                            icon = { Icon(screen.icon, contentDescription = screen.title) },
-                                            label = { Text(screen.title) },
-                                            selected = currentRoute == screen.route,
-                                            onClick = {
-                                                navController.navigate(screen.route) {
-                                                    popUpTo(navController.graph.startDestinationId) {
-                                                        saveState = true
-                                                    }
-                                                    launchSingleTop = true
-                                                    restoreState = true
+                            NavigationBar {
+                                val items = listOf(Screen.Board, Screen.Search, Screen.Favorite, Screen.MyPage)
+                                items.forEach { screen ->
+                                    NavigationBarItem(
+                                        icon = { Icon(screen.icon, contentDescription = screen.title) },
+                                        label = { Text(screen.title) },
+                                        selected = currentRoute == screen.route,
+                                        onClick = {
+                                            navController.navigate(screen.route) {
+                                                popUpTo(navController.graph.startDestinationId) {
+                                                    saveState = true
                                                 }
+                                                launchSingleTop = true
+                                                restoreState = true
                                             }
-                                        )
-                                    }
+                                        }
+                                    )
                                 }
-                                AdBanner(modifier = Modifier.fillMaxWidth())
                             }
+                            AdBanner(modifier = Modifier.fillMaxWidth())
                         }
                     }
                 ) { paddingValues ->
@@ -193,7 +212,44 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                         }
-                        composable(Screen.Settings.route) { // 설정 화면 추가
+                        composable(Screen.Search.route) {
+                            LaunchedEffect(Unit) { showBottomBar = true }
+                            SearchScreen(
+                                postRepository = postRepository,
+                                onPostClick = { postId -> navController.navigate("post_detail/$postId") }
+                            )
+                        }
+                        composable(Screen.Favorite.route) {
+                            LaunchedEffect(Unit) { showBottomBar = true }
+                            FavoriteScreen(
+                                postRepository = postRepository,
+                                onPostClick = { postId -> navController.navigate("post_detail/$postId") }
+                            )
+                        }
+                        composable(Screen.MyPage.route) {
+                            LaunchedEffect(Unit) { showBottomBar = true }
+                            MyPageScreen(
+                                onSettingsClick = { navController.navigate(Screen.Settings.route) },
+                                onMyPostsClick = { navController.navigate("my_posts") },
+                                onFavoritePostsClick = { navController.navigate("favorite_posts") },
+                                onLogoutClick = {
+                                    firebaseAuth.signOut()
+                                    Toast.makeText(this@MainActivity, "로그아웃 되었습니다.", Toast.LENGTH_SHORT).show()
+                                    navController.navigate("login") {
+                                        popUpTo(0) { inclusive = true }
+                                    }
+                                },
+                                onEditProfileClick = { navController.navigate("edit_profile") },
+                                onNotificationSettingsClick = { navController.navigate("notification_settings") }
+                            )
+                        }
+                        composable("my_posts") {
+                            MyPostsScreen(postRepository = postRepository, onBack = { navController.popBackStack() })
+                        }
+                        composable("favorite_posts") {
+                            FavoritePostsScreen(postRepository = postRepository, onBack = { navController.popBackStack() })
+                        }
+                        composable(Screen.Settings.route) {
                             LaunchedEffect(Unit) { showBottomBar = true }
                             SettingsScreen(
                                 modifier = Modifier.fillMaxSize(),
@@ -246,6 +302,18 @@ class MainActivity : ComponentActivity() {
                                     refreshPosts()
                                     navController.popBackStack()
                                 }
+                            )
+                        }
+                        composable("edit_profile") {
+                            EditProfileScreen(
+                                userRepository = userRepository,
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable("notification_settings") {
+                            NotificationSettingsScreen(
+                                userRepository = userRepository,
+                                onBack = { navController.popBackStack() }
                             )
                         }
                     }
@@ -477,4 +545,721 @@ fun AdBanner(modifier: Modifier = Modifier) {
             }
         }
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SearchScreen(postRepository: PostRepository, onPostClick: (String) -> Unit) {
+    var searchQuery by remember { mutableStateOf("") }
+    var searchResults by remember { mutableStateOf<List<Post>>(emptyList()) }
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(searchQuery) {
+        if (searchQuery.isNotBlank()) {
+            coroutineScope.launch {
+                searchResults = postRepository.searchPosts(searchQuery, null)
+            }
+        } else {
+            searchResults = emptyList()
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(title = { Text("검색") })
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp)
+        ) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                label = { Text("검색어를 입력하세요") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            if (searchQuery.isBlank()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("검색어를 입력하여 글을 찾아보세요.")
+                }
+            } else if (searchResults.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("검색 결과가 없습니다.")
+                }
+            } else {
+                LazyColumn {
+                    items(searchResults) { post ->
+                        PostItem(post = post, onPostClick = onPostClick)
+                        HorizontalDivider()
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun FavoriteScreen(postRepository: PostRepository, onPostClick: (String) -> Unit) {
+    val firebaseAuth = Firebase.auth
+    val userId = firebaseAuth.currentUser?.uid
+    val posts = remember { mutableStateListOf<Post>() }
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(userId) {
+        if (userId != null) {
+            coroutineScope.launch {
+                posts.clear()
+                posts.addAll(postRepository.getFavoritePostsByUserId(userId))
+            }
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(title = { Text("즐겨찾기") })
+        }
+    ) { paddingValues ->
+        if (posts.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                Text("즐겨찾기한 글이 없습니다.")
+            }
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+                items(posts) { post ->
+                    PostItem(post = post, onPostClick = onPostClick)
+                    HorizontalDivider()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MyPageScreen(
+    onSettingsClick: () -> Unit,
+    onMyPostsClick: () -> Unit,
+    onFavoritePostsClick: () -> Unit,
+    onLogoutClick: () -> Unit,
+    onEditProfileClick: () -> Unit,
+    onNotificationSettingsClick: () -> Unit
+) {
+    val firebaseAuth = Firebase.auth
+    val currentUser = firebaseAuth.currentUser
+    val userRepository = remember { UserRepository() }
+    val user = remember { mutableStateOf<User?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(currentUser?.uid) {
+        currentUser?.uid?.let { uid ->
+            coroutineScope.launch {
+                user.value = userRepository.getUser(uid)
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(16.dp)
+    ) {
+        // 프로필 섹션
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // 프로필 이미지
+                Box(
+                    modifier = Modifier.size(80.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (user.value?.profileImageUrl?.isNotEmpty() == true) {
+                        AsyncImage(
+                            model = user.value?.profileImageUrl,
+                            contentDescription = "프로필 이미지",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.Person,
+                            contentDescription = "프로필 이미지",
+                            modifier = Modifier.size(60.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // 사용자 정보
+                Text(
+                    text = user.value?.displayName ?: currentUser?.displayName ?: "사용자",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                if (user.value?.email?.isNotEmpty() == true) {
+                    Text(
+                        text = user.value?.email ?: "",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                
+                if (user.value?.bio?.isNotEmpty() == true) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = user.value?.bio ?: "",
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // 통계 정보
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = user.value?.points?.toString() ?: "0",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "포인트",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = user.value?.badges?.size?.toString() ?: "0",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "뱃지",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // 프로필 편집 버튼
+                OutlinedButton(
+                    onClick = onEditProfileClick,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Filled.Edit, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("프로필 편집")
+                }
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // 메뉴 버튼들
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(modifier = Modifier.padding(8.dp)) {
+                ListItem(
+                    headlineContent = { Text("내 작성글") },
+                    leadingContent = { Icon(Icons.Filled.Article, contentDescription = null) },
+                    modifier = Modifier.clickable { onMyPostsClick() }
+                )
+                
+                ListItem(
+                    headlineContent = { Text("즐겨찾기") },
+                    leadingContent = { Icon(Icons.Filled.Favorite, contentDescription = null) },
+                    modifier = Modifier.clickable { onFavoritePostsClick() }
+                )
+                
+                ListItem(
+                    headlineContent = { Text("알림 설정") },
+                    leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) },
+                    modifier = Modifier.clickable { onNotificationSettingsClick() }
+                )
+                
+                ListItem(
+                    headlineContent = { Text("설정") },
+                    leadingContent = { Icon(Icons.Filled.Settings, contentDescription = null) },
+                    modifier = Modifier.clickable { onSettingsClick() }
+                )
+                
+                ListItem(
+                    headlineContent = { Text("로그아웃") },
+                    leadingContent = { Icon(Icons.Filled.Logout, contentDescription = null) },
+                    modifier = Modifier.clickable { onLogoutClick() }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MyPostsScreen(postRepository: PostRepository, onBack: () -> Unit) {
+    val firebaseAuth = Firebase.auth
+    val userId = firebaseAuth.currentUser?.uid
+    val posts = remember { mutableStateListOf<Post>() }
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(userId) {
+        if (userId != null) {
+            coroutineScope.launch {
+                posts.clear()
+                posts.addAll(postRepository.getPostsByAuthorId(userId))
+            }
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("내 작성글") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로 가기")
+                    }
+                }
+            )
+        }
+    ) { paddingValues ->
+        if (posts.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                Text("작성한 글이 없습니다.")
+            }
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+                items(posts) { post ->
+                    PostItem(post = post, onPostClick = { /* 상세보기 이동 등 필요시 구현 */ })
+                    HorizontalDivider()
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun FavoritePostsScreen(postRepository: PostRepository, onBack: () -> Unit) {
+    val firebaseAuth = Firebase.auth
+    val userId = firebaseAuth.currentUser?.uid
+    val posts = remember { mutableStateListOf<Post>() }
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(userId) {
+        if (userId != null) {
+            coroutineScope.launch {
+                posts.clear()
+                posts.addAll(postRepository.getFavoritePostsByUserId(userId))
+            }
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("즐겨찾기 글 목록") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로 가기")
+                    }
+                }
+            )
+        }
+    ) { paddingValues ->
+        if (posts.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                Text("즐겨찾기한 글이 없습니다.")
+            }
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+                items(posts) { post ->
+                    PostItem(post = post, onPostClick = { /* 상세보기 이동 등 필요시 구현 */ })
+                    HorizontalDivider()
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditProfileScreen(
+    userRepository: UserRepository,
+    onBack: () -> Unit
+) {
+    val firebaseAuth = Firebase.auth
+    val currentUser = firebaseAuth.currentUser
+    val user = remember { mutableStateOf<User?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+    
+    var displayName by remember { mutableStateOf("") }
+    var bio by remember { mutableStateOf("") }
+    var profileImageUrl by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
+    
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { selectedUri ->
+            coroutineScope.launch {
+                isLoading = true
+                try {
+                    val uploadedUrl = userRepository.uploadProfileImage(currentUser?.uid ?: "", selectedUri)
+                    uploadedUrl?.let { url ->
+                        profileImageUrl = url
+                        userRepository.updateProfile(currentUser?.uid ?: "", profileImageUrl = url)
+                    }
+                } catch (e: Exception) {
+                    Log.e("EditProfileScreen", "Error uploading image: ${e.message}")
+                } finally {
+                    isLoading = false
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(currentUser?.uid) {
+        currentUser?.uid?.let { uid ->
+            coroutineScope.launch {
+                val userData = userRepository.getUser(uid)
+                user.value = userData
+                displayName = userData?.displayName ?: ""
+                bio = userData?.bio ?: ""
+                profileImageUrl = userData?.profileImageUrl ?: ""
+            }
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("프로필 편집") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로 가기")
+                    }
+                },
+                actions = {
+                    TextButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                isLoading = true
+                                try {
+                                    userRepository.updateProfile(
+                                        currentUser?.uid ?: "",
+                                        displayName = displayName,
+                                        bio = bio
+                                    )
+                                    onBack()
+                                } finally {
+                                    isLoading = false
+                                }
+                            }
+                        },
+                        enabled = !isLoading
+                    ) {
+                        Text("저장")
+                    }
+                }
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp)
+        ) {
+            // 프로필 이미지 섹션
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier.size(100.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (profileImageUrl.isNotEmpty()) {
+                            AsyncImage(
+                                model = profileImageUrl,
+                                contentDescription = "프로필 이미지",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.Person,
+                                contentDescription = "프로필 이미지",
+                                modifier = Modifier.size(80.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.align(Alignment.Center)
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    OutlinedButton(
+                        onClick = { imagePickerLauncher.launch("image/*") },
+                        enabled = !isLoading
+                    ) {
+                        Icon(Icons.Filled.PhotoCamera, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("프로필 이미지 변경")
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // 프로필 정보 입력
+            OutlinedTextField(
+                value = displayName,
+                onValueChange = { displayName = it },
+                label = { Text("닉네임") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            OutlinedTextField(
+                value = bio,
+                onValueChange = { bio = it },
+                label = { Text("자기소개") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 3,
+                maxLines = 5
+            )
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // 통계 정보 표시
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "활동 통계",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = user.value?.points?.toString() ?: "0",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "포인트",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = user.value?.badges?.size?.toString() ?: "0",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "뱃지",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NotificationSettingsScreen(
+    userRepository: UserRepository,
+    onBack: () -> Unit
+) {
+    val firebaseAuth = Firebase.auth
+    val currentUser = firebaseAuth.currentUser
+    val user = remember { mutableStateOf<User?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+    
+    var newCommentNotification by remember { mutableStateOf(true) }
+    var popularPostNotification by remember { mutableStateOf(true) }
+    var mentionNotification by remember { mutableStateOf(true) }
+    var marketingNotification by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
+
+    LaunchedEffect(currentUser?.uid) {
+        currentUser?.uid?.let { uid ->
+            coroutineScope.launch {
+                val userData = userRepository.getUser(uid)
+                user.value = userData
+                userData?.notificationSettings?.let { settings ->
+                    newCommentNotification = settings.newComment
+                    popularPostNotification = settings.popularPost
+                    mentionNotification = settings.mention
+                    marketingNotification = settings.marketing
+                }
+            }
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("알림 설정") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로 가기")
+                    }
+                },
+                actions = {
+                    TextButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                isLoading = true
+                                try {
+                                    val settings = NotificationSettings(
+                                        newComment = newCommentNotification,
+                                        popularPost = popularPostNotification,
+                                        mention = mentionNotification,
+                                        marketing = marketingNotification
+                                    )
+                                    currentUser?.uid?.let { uid ->
+                                        userRepository.updateNotificationSettings(uid, settings)
+                                    }
+                                    onBack()
+                                } finally {
+                                    isLoading = false
+                                }
+                            }
+                        },
+                        enabled = !isLoading
+                    ) {
+                        Text("저장")
+                    }
+                }
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp)
+        ) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "알림 설정",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // 새 댓글 알림
+                    ListItem(
+                        headlineContent = { Text("새 댓글 알림") },
+                        supportingContent = { Text("내 게시글에 새 댓글이 달리면 알림을 받습니다") },
+                        trailingContent = {
+                            Switch(
+                                checked = newCommentNotification,
+                                onCheckedChange = { newCommentNotification = it }
+                            )
+                        }
+                    )
+                    
+                    // 인기글 선정 알림
+                    ListItem(
+                        headlineContent = { Text("인기글 선정 알림") },
+                        supportingContent = { Text("내 게시글이 인기글에 선정되면 알림을 받습니다") },
+                        trailingContent = {
+                            Switch(
+                                checked = popularPostNotification,
+                                onCheckedChange = { popularPostNotification = it }
+                            )
+                        }
+                    )
+                    
+                    // 멘션 알림
+                    ListItem(
+                        headlineContent = { Text("멘션 알림") },
+                        supportingContent = { Text("댓글에서 @로 언급되면 알림을 받습니다") },
+                        trailingContent = {
+                            Switch(
+                                checked = mentionNotification,
+                                onCheckedChange = { mentionNotification = it }
+                            )
+                        }
+                    )
+                    
+                    // 마케팅 알림
+                    ListItem(
+                        headlineContent = { Text("마케팅 알림") },
+                        supportingContent = { Text("이벤트, 업데이트 등의 마케팅 알림을 받습니다") },
+                        trailingContent = {
+                            Switch(
+                                checked = marketingNotification,
+                                onCheckedChange = { marketingNotification = it }
+                            )
+                        }
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // 알림 히스토리 버튼
+            OutlinedButton(
+                onClick = { /* 알림 히스토리 화면으로 이동 */ },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Filled.History, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("알림 히스토리")
+            }
+        }
+    }
 }
