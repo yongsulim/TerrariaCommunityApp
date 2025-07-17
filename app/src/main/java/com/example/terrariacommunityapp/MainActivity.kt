@@ -240,8 +240,13 @@ class MainActivity : ComponentActivity() {
                                     }
                                 },
                                 onEditProfileClick = { navController.navigate("edit_profile") },
-                                onNotificationSettingsClick = { navController.navigate("notification_settings") }
+                                onNotificationSettingsClick = { navController.navigate("notification_settings") },
+                                onNotificationHistoryClick = { navController.navigate("notification_history") }
                             )
+                        }
+                        composable("notification_history") {
+                            val userId = firebaseAuth.currentUser?.uid ?: ""
+                            NotificationHistoryScreen(userId = userId, navController = navController)
                         }
                         composable("my_posts") {
                             MyPostsScreen(postRepository = postRepository, onBack = { navController.popBackStack() })
@@ -648,7 +653,8 @@ fun MyPageScreen(
     onFavoritePostsClick: () -> Unit,
     onLogoutClick: () -> Unit,
     onEditProfileClick: () -> Unit,
-    onNotificationSettingsClick: () -> Unit
+    onNotificationSettingsClick: () -> Unit,
+    onNotificationHistoryClick: () -> Unit
 ) {
     val firebaseAuth = Firebase.auth
     val currentUser = firebaseAuth.currentUser
@@ -794,6 +800,12 @@ fun MyPageScreen(
                     headlineContent = { Text("알림 설정") },
                     leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) },
                     modifier = Modifier.clickable { onNotificationSettingsClick() }
+                )
+                
+                ListItem(
+                    headlineContent = { Text("알림 히스토리") },
+                    leadingContent = { Icon(Icons.Filled.History, contentDescription = null) },
+                    modifier = Modifier.clickable { onNotificationHistoryClick() }
                 )
                 
                 ListItem(

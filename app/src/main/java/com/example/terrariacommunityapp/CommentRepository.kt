@@ -43,6 +43,23 @@ class CommentRepository {
                     )
                 }
             }
+
+            // 멘션 알림 처리
+            val mentionedNicknames = extractMentionedNicknames(comment.content)
+            val notificationRepository = NotificationRepository()
+            for (nickname in mentionedNicknames) {
+                val mentionedUserId = userRepository.getUserIdByNickname(nickname)
+                if (mentionedUserId != null && mentionedUserId != postAuthorUid) { // 자기 자신/게시글 작성자 중복 방지
+                    notificationRepository.sendMentionNotification(
+                        mentionedUserId = mentionedUserId,
+                        content = comment.content,
+                        postId = comment.postId,
+                        commentId = newDocRef.id,
+                        senderName = comment.author
+                    )
+                }
+            }
+
             newDocRef.id
         } catch (e: Exception) {
             Log.e("CommentRepository", "Error adding comment or sending notification: ${e.message}", e)
@@ -176,5 +193,11 @@ class CommentRepository {
             e.printStackTrace()
             false
         }
+    }
+
+    // 댓글 내용에서 @닉네임 패턴 추출
+    fun extractMentionedNicknames(content: String): List<String> {
+        val regex = Regex("@([a-zA-Z0-9가-힣_]+)")
+        return regex.findAll(content).map { it.groupValues[1] }.toList()
     }
 } 

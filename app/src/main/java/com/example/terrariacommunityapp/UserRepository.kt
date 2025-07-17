@@ -122,4 +122,18 @@ class UserRepository {
             false
         }
     }
+
+    // 닉네임으로 userId 조회
+    suspend fun getUserIdByNickname(nickname: String): String? {
+        return try {
+            val snapshot = usersCollection
+                .whereEqualTo("displayName", nickname)
+                .limit(1)
+                .get()
+                .await()
+            snapshot.documents.firstOrNull()?.id
+        } catch (e: Exception) {
+            null
+        }
+    }
 } 
