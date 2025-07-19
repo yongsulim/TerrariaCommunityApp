@@ -76,6 +76,7 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("io.github.kevinnzou:compose-webview:0.33.6")
+    implementation("androidx.compose.material:material:1.6.7")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

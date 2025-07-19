@@ -28,13 +28,8 @@ fun BoardScreen(
     posts: List<Post>,
     popularPosts: List<Post>,
     onPostClick: (String) -> Unit,
-    onAddPostClick: () -> Unit,
-    onCategorySelected: (String?, String) -> Unit,
-    searchQuery: String,
-    onSearchQueryChanged: (String) -> Unit
+    onAddPostClick: () -> Unit
 ) {
-    val categories = listOf("질문", "팁", "갤러리")
-    var selectedCategory by remember { mutableStateOf<String?>(categories[0]) }
     val tabs = listOf("최신글", "인기글")
     var selectedTab by remember { mutableStateOf(tabs[0]) }
 
@@ -49,29 +44,6 @@ fun BoardScreen(
         }
     ) { paddingValues ->
         Column(modifier = Modifier.padding(paddingValues).fillMaxSize()) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = onSearchQueryChanged,
-                label = { Text("검색") },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)
-            )
-            LazyRow(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(horizontal = 8.dp)
-            ) {
-                items(categories) { category ->
-                    FilterChip(
-                        selected = selectedCategory == category,
-                        onClick = {
-                            selectedCategory = category
-                            onCategorySelected(category, selectedTab)
-                        },
-                        label = { Text(category) }
-                    )
-                }
-            }
-
             TabRow(selectedTabIndex = tabs.indexOf(selectedTab)) {
                 tabs.forEachIndexed { _, title ->
                     Tab(

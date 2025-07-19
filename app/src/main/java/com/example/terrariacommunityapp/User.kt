@@ -12,7 +12,8 @@ data class User(
     val createdAt: Long = System.currentTimeMillis(),
     val lastLoginAt: Long = System.currentTimeMillis(),
     val isOnline: Boolean = false,
-    val notificationSettings: NotificationSettings = NotificationSettings()
+    val notificationSettings: NotificationSettings = NotificationSettings(),
+    val blockedUserIds: List<String> = emptyList() // 차단한 사용자 UID 목록
 )
 
 data class NotificationSettings(

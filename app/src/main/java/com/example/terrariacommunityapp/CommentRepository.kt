@@ -44,12 +44,18 @@ class CommentRepository {
                 }
             }
 
-            // 멘션 알림 처리
+            // 멘션 알림 처리 (여러 명 멘션 중복 방지, 자기자신/게시글 작성자 제외)
             val mentionedNicknames = extractMentionedNicknames(comment.content)
             val notificationRepository = NotificationRepository()
-            for (nickname in mentionedNicknames) {
+            val notifiedUserIds = mutableSetOf<String>()
+            for (nickname in mentionedNicknames.distinct()) {
                 val mentionedUserId = userRepository.getUserIdByNickname(nickname)
-                if (mentionedUserId != null && mentionedUserId != postAuthorUid) { // 자기 자신/게시글 작성자 중복 방지
+                if (
+                    mentionedUserId != null &&
+                    mentionedUserId != postAuthorUid &&
+                    mentionedUserId != comment.author && // 자기자신 멘션 방지 (author가 UID라면)
+                    !notifiedUserIds.contains(mentionedUserId)
+                ) {
                     notificationRepository.sendMentionNotification(
                         mentionedUserId = mentionedUserId,
                         content = comment.content,
@@ -57,6 +63,7 @@ class CommentRepository {
                         commentId = newDocRef.id,
                         senderName = comment.author
                     )
+                    notifiedUserIds.add(mentionedUserId)
                 }
             }
 
@@ -92,6 +99,35 @@ class CommentRepository {
         return try {
             commentsCollection.whereEqualTo("postId", postId)
                 .orderBy("timestamp", Query.Direction.DESCENDING)
+                .get()
+                .await()
+                .toObjects(Comment::class.java)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+    // 특정 게시물의 최상위 댓글 조회 (parentCommentId == null)
+    suspend fun getTopLevelCommentsForPost(postId: String): List<Comment> {
+        return try {
+            commentsCollection.whereEqualTo("postId", postId)
+                .whereEqualTo("parentCommentId", null)
+                .orderBy("timestamp", Query.Direction.DESCENDING)
+                .get()
+                .await()
+                .toObjects(Comment::class.java)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+    // 특정 댓글의 대댓글(자식 댓글) 조회
+    suspend fun getRepliesForComment(parentCommentId: String): List<Comment> {
+        return try {
+            commentsCollection.whereEqualTo("parentCommentId", parentCommentId)
+                .orderBy("timestamp", Query.Direction.ASCENDING)
                 .get()
                 .await()
                 .toObjects(Comment::class.java)

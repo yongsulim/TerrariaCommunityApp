@@ -136,4 +136,40 @@ class UserRepository {
             null
         }
     }
+
+    // 사용자 차단
+    suspend fun addBlockedUser(myUid: String, targetUid: String): Boolean {
+        return try {
+            val userRef = usersCollection.document(myUid)
+            db.runTransaction { transaction ->
+                val snapshot = transaction.get(userRef)
+                @Suppress("UNCHECKED_CAST")
+                val blocked: List<String> = snapshot.get("blockedUserIds") as? List<String> ?: emptyList()
+                if (!blocked.contains(targetUid)) {
+                    transaction.update(userRef, "blockedUserIds", blocked + targetUid)
+                }
+            }.await()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    // 사용자 차단 해제
+    suspend fun removeBlockedUser(myUid: String, targetUid: String): Boolean {
+        return try {
+            val userRef = usersCollection.document(myUid)
+            db.runTransaction { transaction ->
+                val snapshot = transaction.get(userRef)
+                @Suppress("UNCHECKED_CAST")
+                val blocked: List<String> = snapshot.get("blockedUserIds") as? List<String> ?: emptyList()
+                if (blocked.contains(targetUid)) {
+                    transaction.update(userRef, "blockedUserIds", blocked - targetUid)
+                }
+            }.await()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
 } 

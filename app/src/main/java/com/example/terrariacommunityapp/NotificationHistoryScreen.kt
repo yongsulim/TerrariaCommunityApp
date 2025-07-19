@@ -6,11 +6,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
-import androidx.compose.material3.DismissDirection
-import androidx.compose.material3.DismissValue
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.SwipeToDismiss
-import androidx.compose.material3.rememberDismissState
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,6 +31,8 @@ fun NotificationHistoryScreen(
     val coroutineScope = rememberCoroutineScope()
     var notifications by remember { mutableStateOf<List<Notification>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    // 알림 상세 다이얼로그 상태
+    var selectedNotification by remember { mutableStateOf<Notification?>(null) }
 
     LaunchedEffect(userId) {
         isLoading = true
@@ -72,33 +72,30 @@ fun NotificationHistoryScreen(
         } else {
             LazyColumn {
                 items(notifications, key = { it.id }) { notification ->
-                    val dismissState = rememberDismissState(
+                    val dismissState = rememberSwipeToDismissBoxState(
                         confirmValueChange = {
-                            if (it == DismissValue.DismissedToStart || it == DismissValue.DismissedToEnd) {
+                            if (it == SwipeToDismissBoxValue.EndToStart || it == SwipeToDismissBoxValue.StartToEnd) {
                                 coroutineScope.launch {
                                     notificationRepository.deleteNotification(notification.id)
                                     notifications = notificationRepository.getNotifications(userId)
                                 }
+                                true
+                            } else {
+                                false
                             }
-                            true
                         }
                     )
-                    SwipeToDismiss(
+                    SwipeToDismissBox(
                         state = dismissState,
-                        background = {},
-                        directions = setOf(DismissDirection.EndToStart, DismissDirection.StartToEnd),
-                        dismissContent = {
+                        backgroundContent = { /* 필요시 배경 UI */ },
+                        content = {
                             NotificationItem(
                                 notification = notification,
                                 onClick = {
                                     coroutineScope.launch {
                                         notificationRepository.markAsRead(notification.id)
                                         notifications = notificationRepository.getNotifications(userId)
-                                        // postId가 있으면 게시글 상세로 이동
-                                        if (notification.postId.isNotEmpty()) {
-                                            navController.navigate("post_detail/${notification.postId}")
-                                        }
-                                        // 추후 commentId 등 상세 이동 추가 가능
+                                        selectedNotification = notification // 상세 다이얼로그 표시
                                     }
                                 }
                             )
@@ -107,6 +104,66 @@ fun NotificationHistoryScreen(
                 }
             }
         }
+    }
+    // 알림 상세 다이얼로그
+    selectedNotification?.let { noti ->
+        AlertDialog(
+            onDismissRequest = { selectedNotification = null },
+            title = { Text("알림 상세") },
+            text = {
+                Column {
+                    Text("내용: ${noti.content}")
+                    Text("유형: ${noti.type}")
+                    Text("시간: ${SimpleDateFormat("yyyy.MM.dd HH:mm", Locale.getDefault()).format(Date(noti.timestamp))}")
+                    when (noti.type) {
+                        "comment" -> {
+                            if (noti.postId.isNotEmpty()) {
+                                TextButton(onClick = {
+                                    navController.navigate("post_detail/${noti.postId}")
+                                    selectedNotification = null
+                                }) { Text("관련 게시글 보기") }
+                            }
+                            if (noti.commentId.isNotEmpty()) {
+                                Text("관련 댓글 ID: ${noti.commentId}")
+                            }
+                        }
+                        "chat" -> {
+                            if (noti.postId.isNotEmpty()) {
+                                TextButton(onClick = {
+                                    navController.navigate("chat_room/${noti.postId}") // postId를 채팅방 ID로 사용한다고 가정
+                                    selectedNotification = null
+                                }) { Text("채팅방으로 이동") }
+                            }
+                        }
+                        "system" -> {
+                            Text("시스템 알림입니다.")
+                        }
+                        "mention" -> {
+                            if (noti.postId.isNotEmpty()) {
+                                TextButton(onClick = {
+                                    navController.navigate("post_detail/${noti.postId}")
+                                    selectedNotification = null
+                                }) { Text("언급된 게시글 보기") }
+                            }
+                        }
+                        "popular" -> {
+                            if (noti.postId.isNotEmpty()) {
+                                TextButton(onClick = {
+                                    navController.navigate("post_detail/${noti.postId}")
+                                    selectedNotification = null
+                                }) { Text("인기글 보기") }
+                            }
+                        }
+                        else -> {
+                            // 기타 알림 유형 처리
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { selectedNotification = null }) { Text("닫기") }
+            }
+        )
     }
 }
 

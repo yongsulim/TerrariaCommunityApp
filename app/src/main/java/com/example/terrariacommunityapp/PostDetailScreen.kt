@@ -26,6 +26,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.viewinterop.AndroidView
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.material.SnackbarHostState
+import androidx.compose.material.rememberScaffoldState
+import androidx.compose.material.Scaffold
+import androidx.compose.material.SnackbarHost
+import androidx.compose.material3.ExperimentalMaterial3Api
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,20 +40,28 @@ fun PostDetailScreen(postId: String, postRepository: PostRepository = PostReposi
     val newCommentContent = remember { mutableStateOf("") }
     val coroutineScope = rememberCoroutineScope()
     val commentRepository = remember { CommentRepository() }
+    val reportRepository = remember { ReportRepository() } // 신고 저장용
     val firebaseAuth = Firebase.auth
     val currentUserUid = firebaseAuth.currentUser?.uid
+    val scaffoldState = rememberScaffoldState()
+    val snackbarHostState = scaffoldState.snackbarHostState
+    // 게시글 신고 다이얼로그 상태
+    var showPostReportDialog by remember { mutableStateOf(false) }
+    var postReportReason by remember { mutableStateOf("") }
 
     LaunchedEffect(postId) {
         coroutineScope.launch {
             post.value = postRepository.getPost(postId)
             if (postId.isNotEmpty()) {
                 comments.clear()
-                comments.addAll(commentRepository.getCommentsForPost(postId))
+                // 최상위 댓글만 불러오기
+                comments.addAll(commentRepository.getTopLevelCommentsForPost(postId))
             }
         }
     }
 
     Scaffold(
+        scaffoldState = scaffoldState,
         topBar = {
             TopAppBar(
                 title = { Text(post.value?.title ?: "게시물 불러오는 중...") },
@@ -65,10 +78,15 @@ fun PostDetailScreen(postId: String, postRepository: PostRepository = PostReposi
                         IconButton(onClick = { onDeletePost(p.id) }) {
                             Icon(painterResource(id = R.drawable.ic_delete), contentDescription = "삭제")
                         }
+                        // 게시글 신고 텍스트 버튼
+                        TextButton(onClick = { showPostReportDialog = true }) {
+                            Text("신고")
+                        }
                     }
                 }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -150,7 +168,8 @@ fun PostDetailScreen(postId: String, postRepository: PostRepository = PostReposi
                                     commentRepository.addComment(newComment)
                                     newCommentContent.value = ""
                                     comments.clear()
-                                    comments.addAll(commentRepository.getCommentsForPost(postId))
+                                    // 최상위 댓글만 다시 불러오기
+                                    comments.addAll(commentRepository.getTopLevelCommentsForPost(postId))
                                 }
                             }
                         }
@@ -176,9 +195,10 @@ fun PostDetailScreen(postId: String, postRepository: PostRepository = PostReposi
                                 onCommentUpdated = {
                                     coroutineScope.launch {
                                         comments.clear()
-                                        comments.addAll(commentRepository.getCommentsForPost(postId))
+                                        comments.addAll(commentRepository.getTopLevelCommentsForPost(postId))
                                     }
-                                }
+                                },
+                                postId = postId // 추가: postId 전달
                             )
                             HorizontalDivider()
                         }
@@ -189,19 +209,70 @@ fun PostDetailScreen(postId: String, postRepository: PostRepository = PostReposi
             }
         }
     }
+    // 게시글 신고 다이얼로그
+    if (showPostReportDialog) {
+        AlertDialog(
+            onDismissRequest = { showPostReportDialog = false },
+            title = { Text("게시글 신고") },
+            text = {
+                OutlinedTextField(
+                    value = postReportReason,
+                    onValueChange = { postReportReason = it },
+                    label = { Text("신고 사유를 입력하세요") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    coroutineScope.launch {
+                        val reporterId = currentUserUid ?: "unknown"
+                        val report = Report(
+                            reporterId = reporterId,
+                            targetId = post.value?.id ?: "",
+                            targetType = "post",
+                            reason = postReportReason
+                        )
+                        reportRepository.addReport(report)
+                        showPostReportDialog = false
+                        postReportReason = ""
+                        scaffoldState.snackbarHostState.showSnackbar("신고가 접수되었습니다.")
+                    }
+                }) { Text("신고") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPostReportDialog = false }) { Text("취소") }
+            }
+        )
+    }
 }
 
+// CommentItem 확장: 댓글 신고 기능 추가
 @Composable
 fun CommentItem(
     comment: Comment,
     currentUserUid: String?,
     commentRepository: CommentRepository,
-    onCommentUpdated: () -> Unit
+    onCommentUpdated: () -> Unit,
+    postId: String
 ) {
     val coroutineScope = rememberCoroutineScope()
     var showEditDialog by remember { mutableStateOf(false) }
     var editContent by remember { mutableStateOf(comment.content) }
-    
+    // 대댓글 관련 상태
+    var showReplyInput by remember { mutableStateOf(false) }
+    var replyContent by remember { mutableStateOf("") }
+    var replies by remember { mutableStateOf(listOf<Comment>()) }
+    // 댓글 신고 다이얼로그 상태
+    var showCommentReportDialog by remember { mutableStateOf(false) }
+    var commentReportReason by remember { mutableStateOf("") }
+    val reportRepository = remember { ReportRepository() }
+    val scaffoldState = rememberScaffoldState()
+    val snackbarHostState = scaffoldState.snackbarHostState // 댓글에서도 스낵바 사용
+    // 대댓글 불러오기
+    LaunchedEffect(comment.id) {
+        replies = commentRepository.getRepliesForComment(comment.id)
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -221,7 +292,6 @@ fun CommentItem(
                     style = MaterialTheme.typography.bodySmall
                 )
             }
-            
             // 댓글 액션 버튼들
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // 좋아요 버튼
@@ -266,6 +336,11 @@ fun CommentItem(
                 }
                 Text(text = "${comment.dislikedBy.size}", style = MaterialTheme.typography.bodySmall)
                 
+                // 댓글 신고 텍스트 버튼
+                TextButton(onClick = { showCommentReportDialog = true }) {
+                    Text("신고")
+                }
+                
                 // 댓글 작성자인 경우 수정/삭제 버튼 표시
                 if (comment.author == (Firebase.auth.currentUser?.displayName ?: "알 수 없음")) {
                     Spacer(modifier = Modifier.width(8.dp))
@@ -292,6 +367,64 @@ fun CommentItem(
                             contentDescription = "댓글 삭제"
                         )
                     }
+                }
+            }
+        }
+        // 답글 달기 버튼
+        TextButton(onClick = { showReplyInput = !showReplyInput }) {
+            Text(if (showReplyInput) "답글 취소" else "답글 달기")
+        }
+        // 답글 입력창
+        if (showReplyInput) {
+            OutlinedTextField(
+                value = replyContent,
+                onValueChange = { replyContent = it },
+                label = { Text("답글 입력") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Button(
+                onClick = {
+                    currentUserUid?.let { _ ->
+                        if (replyContent.isNotBlank()) {
+                            coroutineScope.launch {
+                                val authorName = Firebase.auth.currentUser?.displayName ?: if (Firebase.auth.currentUser?.isAnonymous == true) "게스트" else "알 수 없음"
+                                val replyComment = Comment(
+                                    postId = postId,
+                                    author = authorName,
+                                    content = replyContent,
+                                    parentCommentId = comment.id // 대댓글이므로 parentCommentId 지정
+                                )
+                                commentRepository.addComment(replyComment)
+                                replyContent = ""
+                                showReplyInput = false
+                                // 대댓글 목록 갱신
+                                replies = commentRepository.getRepliesForComment(comment.id)
+                                onCommentUpdated()
+                            }
+                        }
+                    }
+                },
+                modifier = Modifier.padding(top = 4.dp)
+            ) {
+                Text("답글 작성")
+            }
+        }
+        // 대댓글 목록 표시 (들여쓰기)
+        if (replies.isNotEmpty()) {
+            Column(modifier = Modifier.padding(start = 24.dp)) {
+                for (reply in replies) {
+                    CommentItem(
+                        comment = reply,
+                        currentUserUid = currentUserUid,
+                        commentRepository = commentRepository,
+                        onCommentUpdated = {
+                            coroutineScope.launch {
+                                replies = commentRepository.getRepliesForComment(comment.id)
+                                onCommentUpdated()
+                            }
+                        },
+                        postId = postId
+                    )
                 }
             }
         }
@@ -328,6 +461,42 @@ fun CommentItem(
                 TextButton(onClick = { showEditDialog = false }) {
                     Text("취소")
                 }
+            }
+        )
+    }
+    // 댓글 신고 다이얼로그
+    if (showCommentReportDialog) {
+        AlertDialog(
+            onDismissRequest = { showCommentReportDialog = false },
+            title = { Text("댓글 신고") },
+            text = {
+                OutlinedTextField(
+                    value = commentReportReason,
+                    onValueChange = { commentReportReason = it },
+                    label = { Text("신고 사유를 입력하세요") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    coroutineScope.launch {
+                        val reporterId = currentUserUid ?: "unknown"
+                        val report = Report(
+                            reporterId = reporterId,
+                            targetId = comment.id,
+                            targetType = "comment",
+                            reason = commentReportReason
+                        )
+                        reportRepository.addReport(report)
+                        showCommentReportDialog = false
+                        commentReportReason = ""
+                        scaffoldState.snackbarHostState.showSnackbar("신고가 접수되었습니다.")
+                    }
+                }) { Text("신고") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCommentReportDialog = false }) { Text("취소") }
             }
         )
     }

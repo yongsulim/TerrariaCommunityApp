@@ -69,6 +69,12 @@ import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Notifications
+import com.example.terrariacommunityapp.ThemeSettingsScreen
+import com.example.terrariacommunityapp.ThemeMode
+import androidx.compose.ui.graphics.Color
+import com.example.terrariacommunityapp.ui.theme.NotoSansKR
+import com.example.terrariacommunityapp.ui.theme.DefaultFontFamily
+import androidx.compose.ui.text.font.FontFamily
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     object Board : Screen("board", "게시판", Icons.Filled.Home)
@@ -137,14 +143,60 @@ class MainActivity : ComponentActivity() {
         setContent {
             // Use a mutable state to control the theme
             val systemDarkTheme = isSystemInDarkTheme()
+            var darkThemeMode by remember { mutableStateOf(ThemeMode.SYSTEM) }
             var darkTheme by remember { mutableStateOf(systemDarkTheme) }
+            var primaryColor by remember { mutableStateOf(Color(0xFF6650a4)) } // 기본 프라이머리 컬러
+            var fontFamily by remember { mutableStateOf<FontFamily>(DefaultFontFamily) }
+            val startDestination = remember { mutableStateOf<String?>(null) }
+            val startArgs = remember { mutableStateOf<String?>(null) }
 
-            TerrariaCommunityAppTheme(darkTheme = darkTheme) { // Pass the darkTheme state
+            // FCM 딥링크 인텐트 처리
+            LaunchedEffect(Unit) {
+                intent?.extras?.let { extras ->
+                    val type = extras.getString("type")
+                    when (type) {
+                        "comment", "mention", "popular" -> {
+                            val postId = extras.getString("postId")
+                            if (!postId.isNullOrBlank()) {
+                                startDestination.value = "post_detail/$postId"
+                            }
+                        }
+                        "chat" -> {
+                            val chatRoomId = extras.getString("postId")
+                            if (!chatRoomId.isNullOrBlank()) {
+                                startDestination.value = "chat_room/$chatRoomId"
+                            }
+                        }
+                        // 기타 유형 확장 가능
+                    }
+                }
+            }
+
+            // 테마 모드 적용
+            val isDark = when (darkThemeMode) {
+                ThemeMode.SYSTEM -> systemDarkTheme
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
+            }
+
+            TerrariaCommunityAppTheme(
+                darkTheme = isDark,
+                fontFamily = fontFamily
+            ) {
                 val navController = rememberNavController()
                 val coroutineScope = rememberCoroutineScope() // Compose scope
                 val currentBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = currentBackStackEntry?.destination?.route
                 var showBottomBar by remember { mutableStateOf(false) }
+
+                LaunchedEffect(startDestination.value) {
+                    startDestination.value?.let { route ->
+                        navController.navigate(route) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                        startDestination.value = null // 한 번만 이동
+                    }
+                }
 
                 Scaffold(
                     bottomBar = {
@@ -198,17 +250,11 @@ class MainActivity : ComponentActivity() {
                             BoardScreen(
                                 posts = posts,
                                 popularPosts = popularPosts,
-                                onPostClick = { postId -> navController.navigate("post_detail/$postId") },
-                                onAddPostClick = { navController.navigate("post_edit") },
-                                onCategorySelected = { category, currentTabFromBoard ->
-                                    _selectedCategory = category
-                                    _currentBoardContentType = currentTabFromBoard
-                                    refreshPosts(category, currentTabFromBoard, _searchQuery)
+                                onPostClick = { postId ->
+                                    navController.navigate("post_detail/$postId")
                                 },
-                                searchQuery = _searchQuery,
-                                onSearchQueryChanged = { newQuery ->
-                                    _searchQuery = newQuery
-                                    refreshPosts(_selectedCategory, _currentBoardContentType, newQuery)
+                                onAddPostClick = {
+                                    navController.navigate("post_edit")
                                 }
                             )
                         }
@@ -241,7 +287,8 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onEditProfileClick = { navController.navigate("edit_profile") },
                                 onNotificationSettingsClick = { navController.navigate("notification_settings") },
-                                onNotificationHistoryClick = { navController.navigate("notification_history") }
+                                onNotificationHistoryClick = { navController.navigate("notification_history") },
+                                onAdminReportsClick = { navController.navigate("admin_reports") } // 추가
                             )
                         }
                         composable("notification_history") {
@@ -320,6 +367,28 @@ class MainActivity : ComponentActivity() {
                                 userRepository = userRepository,
                                 onBack = { navController.popBackStack() }
                             )
+                        }
+                        // 테마 설정 화면 진입 예시 (설정/마이페이지 등에서 이동)
+                        composable("theme_settings") {
+                            ThemeSettingsScreen(
+                                currentThemeMode = darkThemeMode,
+                                currentPrimaryColor = primaryColor,
+                                onThemeModeChange = { mode ->
+                                    darkThemeMode = mode
+                                },
+                                onPrimaryColorChange = { color ->
+                                    primaryColor = color
+                                },
+                                onFontFamilyChange = { family ->
+                                    fontFamily = family
+                                },
+                                currentFontFamily = fontFamily,
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                        // 관리자 신고 내역 페이지 진입점 추가 (예시: 마이페이지에서)
+                        composable("admin_reports") {
+                            AdminReportScreen(onBack = { navController.popBackStack() })
                         }
                     }
                 }
@@ -654,7 +723,8 @@ fun MyPageScreen(
     onLogoutClick: () -> Unit,
     onEditProfileClick: () -> Unit,
     onNotificationSettingsClick: () -> Unit,
-    onNotificationHistoryClick: () -> Unit
+    onNotificationHistoryClick: () -> Unit,
+    onAdminReportsClick: () -> Unit // 추가
 ) {
     val firebaseAuth = Firebase.auth
     val currentUser = firebaseAuth.currentUser
@@ -669,6 +739,9 @@ fun MyPageScreen(
             }
         }
     }
+
+    // 임시 관리자 판별 (예: 특정 UID)
+    val isAdmin = currentUser?.email == "admin@example.com" // 실제 앱에서는 더 안전한 방식 필요
 
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp)
@@ -808,6 +881,14 @@ fun MyPageScreen(
                     modifier = Modifier.clickable { onNotificationHistoryClick() }
                 )
                 
+                if (isAdmin) {
+                    ListItem(
+                        headlineContent = { Text("신고 내역(관리자)") },
+                        leadingContent = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                        modifier = Modifier.clickable { onAdminReportsClick() }
+                    )
+                }
+                
                 ListItem(
                     headlineContent = { Text("설정") },
                     leadingContent = { Icon(Icons.Filled.Settings, contentDescription = null) },
@@ -819,6 +900,72 @@ fun MyPageScreen(
                     leadingContent = { Icon(Icons.Filled.Logout, contentDescription = null) },
                     modifier = Modifier.clickable { onLogoutClick() }
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun BlockedUsersSection(
+    currentUser: User?,
+    userRepository: UserRepository,
+    onUserUnblocked: () -> Unit
+) {
+    val coroutineScope = rememberCoroutineScope()
+    val blockedUsers = currentUser?.blockedUserIds ?: emptyList()
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Text("차단한 사용자 목록", style = MaterialTheme.typography.titleMedium)
+        if (blockedUsers.isEmpty()) {
+            Text("차단한 사용자가 없습니다.", style = MaterialTheme.typography.bodySmall)
+        } else {
+            blockedUsers.forEach { blockedUid ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = blockedUid, modifier = Modifier.weight(1f))
+                    Button(onClick = {
+                        coroutineScope.launch {
+                            currentUser?.uid?.let { myUid ->
+                                userRepository.removeBlockedUser(myUid, blockedUid)
+                                onUserUnblocked()
+                            }
+                        }
+                    }) {
+                        Text("차단 해제")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun UserProfileSection(
+    currentUser: User?,
+    viewedUser: User?,
+    userRepository: UserRepository,
+    onBlocked: () -> Unit
+) {
+    val coroutineScope = rememberCoroutineScope()
+    val isBlocked = currentUser?.blockedUserIds?.contains(viewedUser?.uid) == true
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Text("프로필", style = MaterialTheme.typography.titleMedium)
+        Text("닉네임: ${viewedUser?.displayName ?: "알 수 없음"}")
+        Text("이메일: ${viewedUser?.email ?: "알 수 없음"}")
+        // ... 기타 정보 ...
+        if (viewedUser != null && currentUser != null && viewedUser.uid != currentUser.uid) {
+            Button(onClick = {
+                coroutineScope.launch {
+                    if (!isBlocked) {
+                        userRepository.addBlockedUser(currentUser.uid, viewedUser.uid)
+                    } else {
+                        userRepository.removeBlockedUser(currentUser.uid, viewedUser.uid)
+                    }
+                    onBlocked()
+                }
+            }) {
+                Text(if (!isBlocked) "차단하기" else "차단 해제")
             }
         }
     }

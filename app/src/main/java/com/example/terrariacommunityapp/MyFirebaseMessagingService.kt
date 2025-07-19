@@ -20,9 +20,10 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         // Check if message contains a data payload.
         if (remoteMessage.data.isNotEmpty()) {
             Log.d(TAG, "Message data payload: ${remoteMessage.data}")
-
-            // Handle message within 10 seconds
-            handleNow()
+            // 딥링크 데이터 포함 알림
+            val body = remoteMessage.notification?.body ?: remoteMessage.data["body"] ?: ""
+            sendNotification(body, remoteMessage.data)
+            return
         }
 
         // Check if message contains a notification payload.
@@ -50,9 +51,13 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         Log.d(TAG, "FCM registration token: $token")
     }
 
-    private fun sendNotification(messageBody: String) {
+    private fun sendNotification(messageBody: String, data: Map<String, String>? = null) {
         val intent = Intent(this, MainActivity::class.java)
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        // 딥링크 데이터가 있으면 인텐트에 추가
+        data?.forEach { (key, value) ->
+            intent.putExtra(key, value)
+        }
         val pendingIntent = PendingIntent.getActivity(this, 0 /* Request code */, intent,
             PendingIntent.FLAG_IMMUTABLE)
 
