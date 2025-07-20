@@ -9,8 +9,16 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.platform.LocalDensity
+import kotlinx.coroutines.delay
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
@@ -475,32 +483,166 @@ fun LoginScreen(modifier: Modifier = Modifier, googleSignInClient: GoogleSignInC
         }
     }
 
-    Column(
-        modifier = modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(text = "테라리아 커뮤니티 앱", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.padding(bottom = 32.dp))
-        Button(onClick = {
-            Log.d(TAG, "Google Login button clicked")
-            googleLauncher.launch(googleSignInClient.signInIntent)
-        }) {
-            Text("Google 로그인")
+    // 슬라이드 애니메이션을 위한 상태
+    var slideOffset by remember { mutableStateOf(0f) }
+    
+    // 무한 슬라이드 애니메이션
+    LaunchedEffect(Unit) {
+        while (true) {
+            animate(
+                initialValue = 0f,
+                targetValue = -100f,
+                animationSpec = tween(8000, easing = LinearEasing)
+            ) { value, _ ->
+                slideOffset = value
+            }
+            delay(1000)
+            animate(
+                initialValue = -100f,
+                targetValue = 0f,
+                animationSpec = tween(8000, easing = LinearEasing)
+            ) { value, _ ->
+                slideOffset = value
+            }
+            delay(1000)
         }
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = {
-            Log.d(TAG, "Guest Login button clicked")
-            firebaseAuth.signInAnonymously()
-                .addOnCompleteListener { task ->
-                    if (task.isSuccessful) {
-                        Log.d(TAG, "Firebase Guest sign-in successful")
-                        onSignInSuccess()
-                    } else {
-                        Log.w(TAG, "Firebase Guest sign-in failed", task.exception)
+    }
+
+    Box(
+        modifier = modifier.fillMaxSize()
+    ) {
+        // 슬라이드 애니메이션 배경 이미지
+        Image(
+            painter = painterResource(id = R.drawable.main),
+            contentDescription = "배경 이미지",
+            modifier = Modifier
+                .fillMaxSize()
+                .offset(x = with(LocalDensity.current) { slideOffset.dp }),
+            contentScale = ContentScale.Crop
+        )
+        
+        // 어두운 오버레이 (텍스트 가독성을 위해)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.3f))
+        )
+        
+        // 로그인 UI (배경 위에 오버레이)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(32.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // 앱 로고/제목
+            Text(
+                text = "테라리아 커뮤니티 앱",
+                style = MaterialTheme.typography.headlineLarge.copy(
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                ),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(bottom = 48.dp)
+            )
+            
+            // 서브타이틀
+            Text(
+                text = "테라리아 팬들을 위한 커뮤니티",
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    color = Color.White.copy(alpha = 0.9f)
+                ),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(bottom = 64.dp)
+            )
+            
+            // 로그인 버튼들
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Button(
+                        onClick = {
+                            Log.d(TAG, "Google Login button clicked")
+                            googleLauncher.launch(googleSignInClient.signInIntent)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Person,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "Google 로그인",
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontWeight = FontWeight.Medium
+                            )
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    OutlinedButton(
+                        onClick = {
+                            Log.d(TAG, "Guest Login button clicked")
+                            firebaseAuth.signInAnonymously()
+                                .addOnCompleteListener { task ->
+                                    if (task.isSuccessful) {
+                                        Log.d(TAG, "Firebase Guest sign-in successful")
+                                        onSignInSuccess()
+                                    } else {
+                                        Log.w(TAG, "Firebase Guest sign-in failed", task.exception)
+                                    }
+                                }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Person,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "게스트 로그인",
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontWeight = FontWeight.Medium
+                            )
+                        )
                     }
                 }
-        }) {
-            Text("게스트 로그인")
+            }
+            
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            // 하단 정보 텍스트
+            Text(
+                text = "로그인하여 커뮤니티에 참여하세요",
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    color = Color.White.copy(alpha = 0.8f)
+                ),
+                textAlign = TextAlign.Center
+            )
         }
     }
 }
