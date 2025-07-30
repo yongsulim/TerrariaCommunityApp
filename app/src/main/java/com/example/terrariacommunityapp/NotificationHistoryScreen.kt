@@ -117,13 +117,13 @@ fun NotificationHistoryScreen(
                     Text("시간: ${SimpleDateFormat("yyyy.MM.dd HH:mm", Locale.getDefault()).format(Date(noti.timestamp))}")
                     when (noti.type) {
                         "comment" -> {
-                            if (noti.postId.isNotEmpty()) {
-                                TextButton(onClick = {
-                                    navController.navigate("post_detail/${noti.postId}")
-                                    selectedNotification = null
-                                }) { Text("관련 게시글 보기") }
-                            }
-                            if (noti.commentId.isNotEmpty()) {
+                    if (noti.postId.isNotEmpty()) {
+                        TextButton(onClick = {
+                            navController.navigate("post_detail/${noti.postId}")
+                            selectedNotification = null
+                        }) { Text("관련 게시글 보기") }
+                    }
+                    if (noti.commentId.isNotEmpty()) {
                                 Text("관련 댓글 ID: ${noti.commentId}")
                             }
                         }
