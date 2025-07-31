@@ -484,53 +484,16 @@ fun LoginScreen(modifier: Modifier = Modifier, googleSignInClient: GoogleSignInC
         }
     }
 
-    // 슬라이드 애니메이션을 위한 상태
-    var slideOffset by remember { mutableStateOf(0f) }
-    
-    // 무한 슬라이드 애니메이션 (가로 이미지 연속 효과 - 잘림 방지)
-    val imageWidthDp = LocalConfiguration.current.screenWidthDp.toFloat() // 이미지 한 장의 가로 크기(dp)
-    LaunchedEffect(Unit) {
-        while (true) {
-            val duration = 15000 // 15초에 한 번 순환
-            val start = 0f
-            val end = -imageWidthDp
-            animate(
-                initialValue = start,
-                targetValue = end,
-                animationSpec = tween(duration, easing = LinearEasing)
-            ) { value, _ ->
-                slideOffset = value
-            }
-            slideOffset = 0f // 한 사이클 끝나면 리셋
-        }
-    }
-
     Box(
         modifier = modifier.fillMaxSize()
     ) {
-        // 슬라이드 애니메이션 배경 이미지 (가로 연속 효과 - 가로 꽉차게)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .offset(x = with(LocalDensity.current) { slideOffset.dp })
-        ) {
-            Image(
-                painter = painterResource(id = R.drawable.main),
-                contentDescription = "배경 이미지1",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(400.dp),
-                contentScale = ContentScale.FillWidth
-            )
-            Image(
-                painter = painterResource(id = R.drawable.main),
-                contentDescription = "배경 이미지2",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(400.dp),
-                contentScale = ContentScale.FillWidth
-            )
-        }
+        // 고정 배경 이미지 (전체 화면)
+        Image(
+            painter = painterResource(id = R.drawable.main),
+            contentDescription = "배경 이미지",
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.FillBounds
+        )
         
         // 어두운 오버레이 (텍스트 가독성을 위해)
         Box(
