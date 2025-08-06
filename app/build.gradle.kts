@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.terrariacommunityapp"
+    namespace = "com.yongsulim.terrariacommunity"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.terrariacommunityapp"
+        applicationId = "com.yongsulim.terrariacommunity"
         minSdk = 24
         targetSdk = 35
         versionCode = 1
