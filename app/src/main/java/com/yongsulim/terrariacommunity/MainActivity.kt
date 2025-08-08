@@ -16,9 +16,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.layout.offset
-import androidx.compose.ui.platform.LocalDensity
-import kotlinx.coroutines.delay
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
@@ -31,12 +28,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
-import androidx.navigation.NavController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -78,13 +72,9 @@ import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Notifications
-import com.yongsulim.terrariacommunity.ThemeSettingsScreen
-import com.yongsulim.terrariacommunity.ThemeMode
 import androidx.compose.ui.graphics.Color
-import com.yongsulim.terrariacommunity.ui.theme.NotoSansKR
 import com.yongsulim.terrariacommunity.ui.theme.DefaultFontFamily
 import androidx.compose.ui.text.font.FontFamily
-
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     object Board : Screen("board", "게시판", Icons.Filled.Home)
@@ -101,8 +91,8 @@ class MainActivity : ComponentActivity() {
     private val userRepository = UserRepository()
     private val posts = mutableStateListOf<Post>()
     private val popularPosts = mutableStateListOf<Post>()
-    private var mInterstitialAd: InterstitialAd? = 
-    private var _selectedCategory by mutableStateOf<String?>()
+    private var mInterstitialAd: InterstitialAd? = null
+    private var _selectedCategory by mutableStateOf<String?>(null)
     private var _searchQuery by mutableStateOf("")
     private var _currentBoardContentType by mutableStateOf("최신글")
 
@@ -111,7 +101,7 @@ class MainActivity : ComponentActivity() {
 
         // Configure Google Sign In
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestIdToken(getString())
+            .requestIdToken(getString(R.string.default_web_client_id))
             .requestEmail()
             .build()
 
@@ -120,9 +110,9 @@ class MainActivity : ComponentActivity() {
 
         // Naver Login SDK 초기화
         NaverIdLoginSDK.initialize(this,
-            getString(),
-            getString(),
-            getString())
+            getString(R.string.naver_client_id),
+            getString(R.string.naver_client_secret),
+            getString(R.string.naver_client_name))
 
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
             if (!task.isSuccessful) {
@@ -157,8 +147,8 @@ class MainActivity : ComponentActivity() {
             var darkTheme by remember { mutableStateOf(systemDarkTheme) }
             var primaryColor by remember { mutableStateOf(Color(0xFF6650a4)) } // 기본 프라이머리 컬러
             var fontFamily by remember { mutableStateOf<FontFamily>(DefaultFontFamily) }
-            val startDestination = remember { mutableStateOf<String?>() }
-            val startArgs = remember { mutableStateOf<String?>() }
+            val startDestination = remember { mutableStateOf<String?>(null) }
+            val startArgs = remember { mutableStateOf<String?>(null) }
 
             // FCM 딥링크 인텐트 처리
             LaunchedEffect(Unit) {
@@ -204,7 +194,7 @@ class MainActivity : ComponentActivity() {
                         navController.navigate(route) {
                             popUpTo(0) { inclusive = true }
                         }
-                        startDestination.value = 
+                        startDestination.value = null // 한 번만 이동
                     }
                 }
 
@@ -326,7 +316,7 @@ class MainActivity : ComponentActivity() {
                             arguments = listOf(navArgument("postId") { type = NavType.StringType })
                         ) { backStackEntry ->
                             val postId = backStackEntry.arguments?.getString("postId")
-                            if (postId != ) {
+                            if (postId != null) {
                                 PostDetailScreen(
                                     postId = postId,
                                     postRepository = postRepository,
@@ -344,7 +334,7 @@ class MainActivity : ComponentActivity() {
                         }
                         composable(
                             "post_edit/{postId}",
-                            arguments = listOf(navArgument("postId") { type = NavType.StringType; )
+                            arguments = listOf(navArgument("postId") { type = NavType.StringType; nullable = true })
                         ) { backStackEntry ->
                             val postId = backStackEntry.arguments?.getString("postId")
                             PostEditScreen(
@@ -358,7 +348,7 @@ class MainActivity : ComponentActivity() {
                         }
                         composable("post_edit") {
                             PostEditScreen(
-                                postId = ,
+                                postId = null,
                                 postRepository = postRepository,
                                 onBack = {
                                     refreshPosts()
@@ -406,7 +396,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun refreshPosts(category: String? = , currentTab: String = "최신글", searchQuery: String = "") {
+    private fun refreshPosts(category: String? = null, currentTab: String = "최신글", searchQuery: String = "") {
         lifecycleScope.launch {
             posts.clear()
             popularPosts.clear()
@@ -432,13 +422,13 @@ class MainActivity : ComponentActivity() {
                 mInterstitialAd?.fullScreenContentCallback = object: com.google.android.gms.ads.FullScreenContentCallback() {
                     override fun onAdDismissedFullScreenContent() {
                         Log.d(TAG, "Ad was dismissed.")
-                        mInterstitialAd = 
+                        mInterstitialAd = null
                         loadInterstitialAd() // Load a new ad after dismissal
                     }
 
                     override fun onAdFailedToShowFullScreenContent(adError: com.google.android.gms.ads.AdError) {
                         Log.d(TAG, "Ad failed to show.")
-                        mInterstitialAd = 
+                        mInterstitialAd = null
                         loadInterstitialAd() // Load a new ad after failure
                     }
 
@@ -450,13 +440,13 @@ class MainActivity : ComponentActivity() {
 
             override fun onAdFailedToLoad(loadAdError: com.google.android.gms.ads.LoadAdError) {
                 Log.d(TAG, loadAdError.message)
-                mInterstitialAd = 
+                mInterstitialAd = null
             }
         })
     }
 
     private fun showInterstitialAd() {
-        if (mInterstitialAd != ) {
+        if (mInterstitialAd != null) {
             mInterstitialAd?.show(this)
         } else {
             Log.d(TAG, "The interstitial ad wasn't ready yet.")
@@ -470,7 +460,7 @@ fun LoginScreen(modifier: Modifier = Modifier, googleSignInClient: GoogleSignInC
         val task = GoogleSignIn.getSignedInAccountFromIntent(it.data)
         try {
             val account = task.getResult(ApiException::class.java)!!
-            val credential = GoogleAuthProvider.getCredential(account.idToken, )
+            val credential = GoogleAuthProvider.getCredential(account.idToken, null)
             firebaseAuth.signInWithCredential(credential)
                 .addOnCompleteListener { authTask ->
                     if (authTask.isSuccessful) {
@@ -490,7 +480,7 @@ fun LoginScreen(modifier: Modifier = Modifier, googleSignInClient: GoogleSignInC
     ) {
         // 고정 배경 이미지 (전체 화면)
         Image(
-                            painter = painterResource(id = ),
+            painter = painterResource(id = R.drawable.main),
             contentDescription = "배경 이미지",
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.FillBounds
@@ -558,7 +548,7 @@ fun LoginScreen(modifier: Modifier = Modifier, googleSignInClient: GoogleSignInC
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Person,
-                            contentDescription = ,
+                            contentDescription = null,
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
@@ -594,7 +584,7 @@ fun LoginScreen(modifier: Modifier = Modifier, googleSignInClient: GoogleSignInC
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Person,
-                            contentDescription = ,
+                            contentDescription = null,
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
@@ -627,7 +617,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, currentDarkTheme: Boolean, onT
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var nickname by remember { mutableStateOf(firebaseAuth.currentUser?.displayName ?: "게스트") }
-    var currentUserData by remember { mutableStateOf<User?>() }
+    var currentUserData by remember { mutableStateOf<User?>(null) }
 
     LaunchedEffect(firebaseAuth.currentUser?.uid) {
         firebaseAuth.currentUser?.uid?.let { uid ->
@@ -671,7 +661,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, currentDarkTheme: Boolean, onT
             onClick = {
                 coroutineScope.launch {
                     val user = firebaseAuth.currentUser
-                    if (user != ) {
+                    if (user != null) {
                         val profileUpdates = UserProfileChangeRequest.Builder()
                             .setDisplayName(nickname)
                             .build()
@@ -748,7 +738,7 @@ fun SearchScreen(postRepository: PostRepository, onPostClick: (String) -> Unit) 
     LaunchedEffect(searchQuery) {
         if (searchQuery.isNotBlank()) {
             coroutineScope.launch {
-                searchResults = postRepository.searchPosts(searchQuery, )
+                searchResults = postRepository.searchPosts(searchQuery, null)
             }
         } else {
             searchResults = emptyList()
@@ -804,7 +794,7 @@ fun FavoriteScreen(postRepository: PostRepository, onPostClick: (String) -> Unit
     val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(userId) {
-        if (userId != ) {
+        if (userId != null) {
             coroutineScope.launch {
                 posts.clear()
                 posts.addAll(postRepository.getFavoritePostsByUserId(userId))
@@ -846,7 +836,7 @@ fun MyPageScreen(
     val firebaseAuth = Firebase.auth
     val currentUser = firebaseAuth.currentUser
     val userRepository = remember { UserRepository() }
-    val user = remember { mutableStateOf<User?>() }
+    val user = remember { mutableStateOf<User?>(null) }
     val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(currentUser?.uid) {
@@ -959,7 +949,7 @@ fun MyPageScreen(
                     onClick = onEditProfileClick,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(Icons.Filled.Edit, contentDescription = )
+                    Icon(Icons.Filled.Edit, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("프로필 편집")
                 }
@@ -976,45 +966,45 @@ fun MyPageScreen(
             Column(modifier = Modifier.padding(8.dp)) {
                 ListItem(
                     headlineContent = { Text("내 작성글") },
-                    leadingContent = { Icon(Icons.Filled.Article, contentDescription = ) },
+                    leadingContent = { Icon(Icons.Filled.Article, contentDescription = null) },
                     modifier = Modifier.clickable { onMyPostsClick() }
                 )
                 
                 ListItem(
                     headlineContent = { Text("즐겨찾기") },
-                    leadingContent = { Icon(Icons.Filled.Favorite, contentDescription = ) },
+                    leadingContent = { Icon(Icons.Filled.Favorite, contentDescription = null) },
                     modifier = Modifier.clickable { onFavoritePostsClick() }
                 )
                 
                 ListItem(
                     headlineContent = { Text("알림 설정") },
-                    leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = ) },
+                    leadingContent = { Icon(Icons.Filled.Notifications, contentDescription = null) },
                     modifier = Modifier.clickable { onNotificationSettingsClick() }
                 )
                 
                 ListItem(
                     headlineContent = { Text("알림 히스토리") },
-                    leadingContent = { Icon(Icons.Filled.History, contentDescription = ) },
+                    leadingContent = { Icon(Icons.Filled.History, contentDescription = null) },
                     modifier = Modifier.clickable { onNotificationHistoryClick() }
                 )
                 
                 if (isAdmin) {
                     ListItem(
                         headlineContent = { Text("신고 내역(관리자)") },
-                        leadingContent = { Icon(Icons.Filled.Edit, contentDescription = ) },
+                        leadingContent = { Icon(Icons.Filled.Edit, contentDescription = null) },
                         modifier = Modifier.clickable { onAdminReportsClick() }
                     )
                 }
                 
                 ListItem(
                     headlineContent = { Text("설정") },
-                    leadingContent = { Icon(Icons.Filled.Settings, contentDescription = ) },
+                    leadingContent = { Icon(Icons.Filled.Settings, contentDescription = null) },
                     modifier = Modifier.clickable { onSettingsClick() }
                 )
                 
                 ListItem(
                     headlineContent = { Text("로그아웃") },
-                    leadingContent = { Icon(Icons.Filled.Logout, contentDescription = ) },
+                    leadingContent = { Icon(Icons.Filled.Logout, contentDescription = null) },
                     modifier = Modifier.clickable { onLogoutClick() }
                 )
             }
@@ -1071,7 +1061,7 @@ fun UserProfileSection(
         Text("닉네임: ${viewedUser?.displayName ?: "알 수 없음"}")
         Text("이메일: ${viewedUser?.email ?: "알 수 없음"}")
         // ... 기타 정보 ...
-        if (viewedUser != ) {
+        if (viewedUser != null && currentUser != null && viewedUser.uid != currentUser.uid) {
             Button(onClick = {
                 coroutineScope.launch {
                     if (!isBlocked) {
@@ -1097,7 +1087,7 @@ fun MyPostsScreen(postRepository: PostRepository, onBack: () -> Unit) {
     val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(userId) {
-        if (userId != ) {
+        if (userId != null) {
             coroutineScope.launch {
                 posts.clear()
                 posts.addAll(postRepository.getPostsByAuthorId(userId))
@@ -1141,7 +1131,7 @@ fun FavoritePostsScreen(postRepository: PostRepository, onBack: () -> Unit) {
     val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(userId) {
-        if (userId != ) {
+        if (userId != null) {
             coroutineScope.launch {
                 posts.clear()
                 posts.addAll(postRepository.getFavoritePostsByUserId(userId))
@@ -1184,7 +1174,7 @@ fun EditProfileScreen(
 ) {
     val firebaseAuth = Firebase.auth
     val currentUser = firebaseAuth.currentUser
-    val user = remember { mutableStateOf<User?>() }
+    val user = remember { mutableStateOf<User?>(null) }
     val coroutineScope = rememberCoroutineScope()
     
     var displayName by remember { mutableStateOf("") }
@@ -1307,7 +1297,7 @@ fun EditProfileScreen(
                         onClick = { imagePickerLauncher.launch("image/*") },
                         enabled = !isLoading
                     ) {
-                        Icon(Icons.Filled.PhotoCamera, contentDescription = )
+                        Icon(Icons.Filled.PhotoCamera, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("프로필 이미지 변경")
                     }
@@ -1394,7 +1384,7 @@ fun NotificationSettingsScreen(
 ) {
     val firebaseAuth = Firebase.auth
     val currentUser = firebaseAuth.currentUser
-    val user = remember { mutableStateOf<User?>() }
+    val user = remember { mutableStateOf<User?>(null) }
     val coroutineScope = rememberCoroutineScope()
     
     var newCommentNotification by remember { mutableStateOf(true) }
@@ -1532,7 +1522,7 @@ fun NotificationSettingsScreen(
                 onClick = { /* 알림 히스토리 화면으로 이동 */ },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Filled.History, contentDescription = )
+                Icon(Icons.Filled.History, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("알림 히스토리")
             }

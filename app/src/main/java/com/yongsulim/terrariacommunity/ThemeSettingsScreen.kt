@@ -128,4 +128,4 @@ fun ThemeSettingsScreen(
     }
 }
 
-enum class ThemeMode { SYSTEM, LIGHT, DARK } 
+enum class ThemeMode { SYSTEM, LIGHT, DARK }

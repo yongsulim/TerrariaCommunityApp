@@ -24,7 +24,7 @@ fun ChatRoomScreen(
     val coroutineScope = rememberCoroutineScope()
     var messages by remember { mutableStateOf(listOf<ChatMessage>()) }
     var newMessage by remember { mutableStateOf("") }
-    var listenerRegistration by remember { mutableStateOf<com.google.firebase.firestore.ListenerRegistration?>() }
+    var listenerRegistration by remember { mutableStateOf<com.google.firebase.firestore.ListenerRegistration?>(null) }
     val userRepository = remember { UserRepository() }
 
     // 실시간 메시지 수신 리스너 등록/해제
@@ -162,4 +162,4 @@ fun ChatMessageItem(msg: ChatMessage, isMine: Boolean) {
             }
         }
     }
-} 
+}

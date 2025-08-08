@@ -14,7 +14,7 @@ class ReportRepository {
             reportsCollection.document(newDocRef.id).update("id", newDocRef.id).await()
             newDocRef.id
         } catch (e: Exception) {
-            
+            null
         }
     }
 
@@ -38,4 +38,4 @@ class ReportRepository {
             emptyList()
         }
     }
-} 
+}

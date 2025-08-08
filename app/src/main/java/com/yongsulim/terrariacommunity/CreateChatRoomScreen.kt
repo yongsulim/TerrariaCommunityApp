@@ -21,7 +21,7 @@ fun CreateChatRoomScreen(
     var roomName by remember { mutableStateOf("") }
     var participantInput by remember { mutableStateOf("") } // 쉼표로 UID 구분
     var isGroup by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf("") }
     var errorMsg by remember { mutableStateOf("") }
     var profileImageUrl by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -102,7 +102,7 @@ fun CreateChatRoomScreen(
                         )
                         val roomId = chatRepository.createRoom(room)
                         isLoading = false
-                        if (roomId != ) {
+                        if (roomId != null) {
                             onRoomCreated(room.copy(id = roomId))
                         } else {
                             errorMsg = "채팅방 생성에 실패했습니다."
@@ -116,4 +116,4 @@ fun CreateChatRoomScreen(
             }
         }
     }
-} 
+}

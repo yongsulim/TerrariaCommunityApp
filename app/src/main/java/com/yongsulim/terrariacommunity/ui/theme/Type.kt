@@ -6,8 +6,7 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.res.fontResource
-
+import com.yongsulim.terrariacommunity.R
 
 // Set of Material typography styles to start with
 val Typography = Typography(
@@ -37,7 +36,7 @@ val Typography = Typography(
 )
 
 val NotoSansKR = FontFamily(
-    Font()
+    Font(R.font.notosanskr_regular)
 )
 
 val DefaultFontFamily = FontFamily.Default

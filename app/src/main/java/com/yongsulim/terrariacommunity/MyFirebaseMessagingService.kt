@@ -12,7 +12,6 @@ import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 
-
 class MyFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
@@ -52,7 +51,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         Log.d(TAG, "FCM registration token: $token")
     }
 
-    private fun sendNotification(messageBody: String, data: Map<String, String>? = ) {
+    private fun sendNotification(messageBody: String, data: Map<String, String>? = null) {
         val intent = Intent(this, MainActivity::class.java)
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
         // 딥링크 데이터가 있으면 인텐트에 추가
@@ -65,7 +64,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val channelId = "fcm_default_channel"
         val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
         val notificationBuilder = NotificationCompat.Builder(this, channelId)
-            .setSmallIcon() // TODO: Change to your app icon
+            .setSmallIcon(R.mipmap.ic_launcher) // TODO: Change to your app icon
             .setContentTitle("FCM Message")
             .setContentText(messageBody)
             .setAutoCancel(true)
@@ -88,4 +87,4 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     companion object {
         private const val TAG = "MyFirebaseMsgService"
     }
-} 
+}

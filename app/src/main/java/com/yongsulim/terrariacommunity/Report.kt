@@ -7,4 +7,4 @@ data class Report(
     val targetType: String = "", // "post" 또는 "comment"
     val reason: String = "", // 신고 사유
     val timestamp: Long = System.currentTimeMillis()
-) 
+)

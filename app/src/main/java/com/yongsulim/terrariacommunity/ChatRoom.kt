@@ -8,4 +8,4 @@ data class ChatRoom(
     val createdAt: Long = System.currentTimeMillis(),
     val profileImageUrl: String = "", // 채팅방 프로필 이미지 URL
     val description: String = "" // 채팅방 설명
-) 
+)

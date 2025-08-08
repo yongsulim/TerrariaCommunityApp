@@ -25,7 +25,7 @@ class ChatRepository {
             roomsCollection.document(newDocRef.id).update("id", newDocRef.id).await()
             newDocRef.id
         } catch (e: Exception) {
-            
+            null
         }
     }
 
@@ -47,7 +47,7 @@ class ChatRepository {
             messagesCollection.document(newDocRef.id).update("id", newDocRef.id).await()
             newDocRef.id
         } catch (e: Exception) {
-            
+            null
         }
     }
 
@@ -80,7 +80,7 @@ class ChatRepository {
         return messagesCollection.whereEqualTo("roomId", roomId)
             .orderBy("timestamp", Query.Direction.ASCENDING)
             .addSnapshotListener { snapshot, _ ->
-                if (snapshot != ) {
+                if (snapshot != null) {
                     val messages = snapshot.toObjects(ChatMessage::class.java)
                     onMessagesChanged(messages)
                 }
@@ -93,7 +93,7 @@ class ChatRepository {
             val roomRef = roomsCollection.document(roomId)
             val snapshot = roomRef.get().await()
             val room = snapshot.toObject(ChatRoom::class.java)
-            if (room != ) {
+            if (room != null) {
                 val updatedParticipants = room.participantIds.filter { it != userId }
                 if (updatedParticipants.isEmpty()) {
                     // 마지막 사용자가 나가면 방 삭제
@@ -109,4 +109,4 @@ class ChatRepository {
             false
             }
     }
-} 
+}

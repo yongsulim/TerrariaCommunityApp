@@ -22,7 +22,7 @@ fun AdminReportScreen(
     val coroutineScope = rememberCoroutineScope()
     var reports by remember { mutableStateOf<List<Report>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
-    var selectedReport by remember { mutableStateOf<Report?>() }
+    var selectedReport by remember { mutableStateOf<Report?>(null) }
 
     LaunchedEffect(Unit) {
         coroutineScope.launch {
@@ -76,7 +76,7 @@ fun AdminReportScreen(
         // 상세 다이얼로그
         selectedReport?.let { report ->
             AlertDialog(
-                onDismissRequest = { selectedReport = ,
+                onDismissRequest = { selectedReport = null },
                 title = { Text("신고 상세 정보") },
                 text = {
                     Column {
@@ -88,9 +88,9 @@ fun AdminReportScreen(
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = { selectedReport = ) { Text("닫기") }
+                    TextButton(onClick = { selectedReport = null }) { Text("닫기") }
                 }
             )
         }
     }
-} 
+}

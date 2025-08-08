@@ -11,4 +11,4 @@ data class Notification(
     val isRead: Boolean = false,
     val postId: String = "",
     val commentId: String = ""
-) 
+)

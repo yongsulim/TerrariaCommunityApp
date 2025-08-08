@@ -31,11 +31,11 @@ class CommentRepository {
             val commentAuthor = comment.author
             val postTitle = post?.title
 
-            if (postAuthorUid != ) { // 게시물 작성자와 댓글 작성자가 다를 경우에만 알림
+            if (postAuthorUid != null && postAuthorUid != comment.author) { // 게시물 작성자와 댓글 작성자가 다를 경우에만 알림
                 val recipientUser = userRepository.getUser(postAuthorUid)
                 val recipientFcmToken = recipientUser?.fcmToken
 
-                if (recipientFcmToken != ) {
+                if (recipientFcmToken != null) {
                     sendNotificationToBackend(
                         recipientFcmToken,
                         "${commentAuthor}님이 게시물에 댓글을 남겼습니다.",
@@ -51,7 +51,7 @@ class CommentRepository {
             for (nickname in mentionedNicknames.distinct()) {
                 val mentionedUserId = userRepository.getUserIdByNickname(nickname)
                 if (
-                    mentionedUserId != 
+                    mentionedUserId != null &&
                     mentionedUserId != postAuthorUid &&
                     mentionedUserId != comment.author && // 자기자신 멘션 방지 (author가 UID라면)
                     !notifiedUserIds.contains(mentionedUserId)
@@ -70,7 +70,7 @@ class CommentRepository {
             newDocRef.id
         } catch (e: Exception) {
             Log.e("CommentRepository", "Error adding comment or sending notification: ${e.message}", e)
-            
+            null
         }
     }
 
@@ -108,11 +108,11 @@ class CommentRepository {
         }
     }
 
-    // 특정 게시물의 최상위 댓글 조회 (parentCommentId == )
+    // 특정 게시물의 최상위 댓글 조회 (parentCommentId == null)
     suspend fun getTopLevelCommentsForPost(postId: String): List<Comment> {
         return try {
             commentsCollection.whereEqualTo("postId", postId)
-                .whereEqualTo("parentCommentId", )
+                .whereEqualTo("parentCommentId", null)
                 .orderBy("timestamp", Query.Direction.DESCENDING)
                 .get()
                 .await()
@@ -216,7 +216,7 @@ class CommentRepository {
             commentsCollection.document(commentId).get().await().toObject(Comment::class.java)
         } catch (e: Exception) {
             e.printStackTrace()
-            
+            null
         }
     }
 
@@ -236,4 +236,4 @@ class CommentRepository {
         val regex = Regex("@([a-zA-Z0-9가-힣_]+)")
         return regex.findAll(content).map { it.groupValues[1] }.toList()
     }
-} 
+}

@@ -7,4 +7,4 @@ data class ChatMessage(
     val senderName: String = "", // 보낸 사람 닉네임
     val content: String = "", // 메시지 내용
     val timestamp: Long = System.currentTimeMillis()
-) 
+)

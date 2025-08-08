@@ -17,7 +17,7 @@ class UserRepository {
             usersCollection.document(uid).get().await().toObject(User::class.java)
         } catch (e: Exception) {
             Log.e("UserRepository", "Error getting user: ${e.message}", e)
-            
+            null
         }
     }
 
@@ -44,12 +44,12 @@ class UserRepository {
             downloadUrl.toString()
         } catch (e: Exception) {
             Log.e("UserRepository", "Error uploading profile image: ${e.message}", e)
-            
+            null
         }
     }
 
     // 프로필 업데이트
-    suspend fun updateProfile(uid: String, displayName: String? = , bio: String? = , profileImageUrl: String? = ): Boolean {
+    suspend fun updateProfile(uid: String, displayName: String? = null, bio: String? = null, profileImageUrl: String? = null): Boolean {
         return try {
             val updates = mutableMapOf<String, Any>()
             displayName?.let { updates["displayName"] = it }
@@ -133,7 +133,7 @@ class UserRepository {
                 .await()
             snapshot.documents.firstOrNull()?.id
         } catch (e: Exception) {
-            
+            null
         }
     }
 
@@ -172,4 +172,4 @@ class UserRepository {
             false
         }
     }
-} 
+}

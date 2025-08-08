@@ -85,4 +85,4 @@ fun ChatRoomListItem(room: ChatRoom, onClick: () -> Unit) {
             }
         }
     }
-} 
+}

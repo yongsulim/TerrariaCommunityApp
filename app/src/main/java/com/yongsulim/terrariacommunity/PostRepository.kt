@@ -46,7 +46,7 @@ class PostRepository {
             downloadUrl.toString()
         } catch (e: Exception) {
             Log.e("PostRepository", "Error uploading image: ${e.message}", e)
-            
+            null
         }
     }
 
@@ -56,15 +56,15 @@ class PostRepository {
             postsCollection.document(postId).get().await().toObject(Post::class.java)
         } catch (e: Exception) {
             e.printStackTrace()
-            
+            null
         }
     }
 
     // 모든 게시물 조회 (최신순)
-    suspend fun getPosts(category: String? = ): List<Post> {
+    suspend fun getPosts(category: String? = null): List<Post> {
         return try {
             var query: Query = postsCollection
-            if (category != ) {
+            if (category != null && category != "전체") {
                 query = query.whereEqualTo("category", category)
             }
             query.orderBy("timestamp", Query.Direction.DESCENDING)
@@ -103,10 +103,10 @@ class PostRepository {
     }
 
     // 게시물 검색
-    suspend fun searchPosts(query: String, category: String? = ): List<Post> {
+    suspend fun searchPosts(query: String, category: String? = null): List<Post> {
         return try {
             var baseQuery = postsCollection.orderBy("timestamp", Query.Direction.DESCENDING)
-            if (category != ) {
+            if (category != null && category != "전체") {
                 baseQuery = baseQuery.whereEqualTo("category", category)
             }
             val results = baseQuery
@@ -194,7 +194,7 @@ class PostRepository {
                         val recipientUser = userRepository.getUser(postAuthorUid)
                         val recipientFcmToken = recipientUser?.fcmToken
 
-                        if (recipientFcmToken != ) {
+                        if (recipientFcmToken != null) {
                             sendNotificationToBackend(
                                 recipientFcmToken,
                                 "인기글 선정!",
@@ -228,4 +228,4 @@ class PostRepository {
             Log.e("PostRepository", "Error sending notification to backend: ${e.message}", e)
         }
     }
-} 
+}

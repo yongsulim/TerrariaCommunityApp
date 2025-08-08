@@ -9,16 +9,12 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Button
-import androidx.compose.foundation.clickable
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.res.painterResource
 import coil.compose.AsyncImage
@@ -26,17 +22,15 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.viewinterop.AndroidView
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import androidx.compose.material.SnackbarHostState
 import androidx.compose.material.rememberScaffoldState
 import androidx.compose.material.Scaffold
 import androidx.compose.material.SnackbarHost
 import androidx.compose.material3.ExperimentalMaterial3Api
 
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PostDetailScreen(postId: String, postRepository: PostRepository = PostRepository(), onBack: () -> Unit, onEditPost: (String) -> Unit, onDeletePost: (String) -> Unit) {
-    val post = remember { mutableStateOf<Post?>() }
+    val post = remember { mutableStateOf<Post?>(null) }
     val comments = remember { mutableStateListOf<Comment>() }
     val newCommentContent = remember { mutableStateOf("") }
     val coroutineScope = rememberCoroutineScope()
@@ -68,16 +62,16 @@ fun PostDetailScreen(postId: String, postRepository: PostRepository = PostReposi
                 title = { Text(post.value?.title ?: "게시물 불러오는 중...") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(painterResource(id = ), contentDescription = "뒤로 가기")
+                        Icon(painterResource(id = R.drawable.ic_arrow_back), contentDescription = "뒤로 가기")
                     }
                 },
                 actions = {
                     post.value?.let { p ->
                         IconButton(onClick = { onEditPost(p.id) }) {
-                            Icon(painterResource(id = ), contentDescription = "수정")
+                            Icon(painterResource(id = R.drawable.ic_edit), contentDescription = "수정")
                         }
                         IconButton(onClick = { onDeletePost(p.id) }) {
-                            Icon(painterResource(id = ), contentDescription = "삭제")
+                            Icon(painterResource(id = R.drawable.ic_delete), contentDescription = "삭제")
                         }
                         // 게시글 신고 텍스트 버튼
                         TextButton(onClick = { showPostReportDialog = true }) {
@@ -88,10 +82,10 @@ fun PostDetailScreen(postId: String, postRepository: PostRepository = PostReposi
             )
         },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
-    ) { paddingValues ->
+    ) {
         Column(
             modifier = Modifier
-                .padding(paddingValues)
+                .padding(it)
                 .padding(16.dp)
                 .fillMaxSize()
         ) {
@@ -109,7 +103,7 @@ fun PostDetailScreen(postId: String, postRepository: PostRepository = PostReposi
                 p.imageUrl?.let { imageUrl ->
                     AsyncImage(
                         model = imageUrl,
-                        contentDescription = ,
+                        contentDescription = null,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(200.dp),
@@ -138,7 +132,7 @@ fun PostDetailScreen(postId: String, postRepository: PostRepository = PostReposi
                         }
                     }) {
                         Icon(
-                            painterResource(id = if (isLiked) ),
+                            painterResource(id = if (isLiked) R.drawable.ic_thumb_up else R.drawable.ic_thumb_down),
                             contentDescription = "좋아요",
                             tint = if (isLiked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                         )
@@ -188,9 +182,9 @@ fun PostDetailScreen(postId: String, postRepository: PostRepository = PostReposi
                     Text("아직 댓글이 없습니다.")
                 } else {
                     LazyColumn {
-                        items(comments) { comment ->
+                        items(comments) {
                             CommentItem(
-                                comment = comment,
+                                comment = it,
                                 currentUserUid = currentUserUid,
                                 commentRepository = commentRepository,
                                 onCommentUpdated = {
@@ -308,7 +302,7 @@ fun CommentItem(
                     }
                 ) {
                     Icon(
-                        painterResource(id = ),
+                        painterResource(id = R.drawable.ic_thumb_up),
                         contentDescription = "댓글 좋아요",
                         tint = if (isLiked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                     )
@@ -330,7 +324,7 @@ fun CommentItem(
                     }
                 ) {
                     Icon(
-                        painterResource(id = ),
+                        painterResource(id = R.drawable.ic_thumb_down),
                         contentDescription = "댓글 싫어요",
                         tint = if (isDisliked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
                     )
@@ -349,7 +343,7 @@ fun CommentItem(
                     // 수정 버튼
                     IconButton(onClick = { showEditDialog = true }) {
                         Icon(
-                            painterResource(id = ),
+                            painterResource(id = R.drawable.ic_edit),
                             contentDescription = "댓글 수정"
                         )
                     }
@@ -364,7 +358,7 @@ fun CommentItem(
                         }
                     ) {
                         Icon(
-                            painterResource(id = ),
+                            painterResource(id = R.drawable.ic_delete),
                             contentDescription = "댓글 삭제"
                         )
                     }
@@ -454,14 +448,10 @@ fun CommentItem(
                             showEditDialog = false
                         }
                     }
-                ) {
-                    Text("수정")
-                }
+                ) { Text("수정") }
             },
             dismissButton = {
-                TextButton(onClick = { showEditDialog = false }) {
-                    Text("취소")
-                }
+                TextButton(onClick = { showEditDialog = false }) { Text("취소") }
             }
         )
     }
@@ -504,7 +494,7 @@ fun CommentItem(
 }
 
 private fun extractYouTubeVideoId(url: String): String? {
-    val regex = """(?<=watch\?v=|/videos/|embed\/|youtu.be\/|\/v\/|\/e\/|watch\?v%3D|watch\?feature=player_embedded&v=|%2Fvideos%2F|embedCEmbedCEmbedC|youtu.be%2F|%2Fv\/|eEmbedCEmbedC)([^#\&\?\n]*)""".trimIndent().toRegex()
+    val regex = "(?<=watch\?v=|/videos/|embed/|youtu.be/|/v/|/e/|watch\?v%3D|watch\?feature=player_embedded&v=|%2Fvideos%2F|embedCEmbedCEmbedC|youtu.be%2F|%2Fv/|eEmbedCEmbedC)([^#\&\?\n]*)".trimIndent().toRegex()
     val matchResult = regex.find(url)
     return matchResult?.value
 }
@@ -523,7 +513,7 @@ fun YoutubeWebView(videoId: String) {
             WebView(context).apply {
                 webViewClient = WebViewClient()
                 settings.javaScriptEnabled = true
-                loadDataWithBaseURL(, html, "text/html", "UTF-8", )
+                loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
             }
         },
         modifier = Modifier

@@ -32,7 +32,7 @@ fun NotificationHistoryScreen(
     var notifications by remember { mutableStateOf<List<Notification>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     // 알림 상세 다이얼로그 상태
-    var selectedNotification by remember { mutableStateOf<Notification?>() }
+    var selectedNotification by remember { mutableStateOf<Notification?>(null) }
 
     LaunchedEffect(userId) {
         isLoading = true
@@ -108,7 +108,7 @@ fun NotificationHistoryScreen(
     // 알림 상세 다이얼로그
     selectedNotification?.let { noti ->
         AlertDialog(
-            onDismissRequest = { selectedNotification = ,
+            onDismissRequest = { selectedNotification = null },
             title = { Text("알림 상세") },
             text = {
                 Column {
@@ -120,7 +120,7 @@ fun NotificationHistoryScreen(
                     if (noti.postId.isNotEmpty()) {
                         TextButton(onClick = {
                             navController.navigate("post_detail/${noti.postId}")
-                            selectedNotification = 
+                            selectedNotification = null
                         }) { Text("관련 게시글 보기") }
                     }
                     if (noti.commentId.isNotEmpty()) {
@@ -131,7 +131,7 @@ fun NotificationHistoryScreen(
                             if (noti.postId.isNotEmpty()) {
                                 TextButton(onClick = {
                                     navController.navigate("chat_room/${noti.postId}") // postId를 채팅방 ID로 사용한다고 가정
-                                    selectedNotification = 
+                                    selectedNotification = null
                                 }) { Text("채팅방으로 이동") }
                             }
                         }
@@ -142,7 +142,7 @@ fun NotificationHistoryScreen(
                             if (noti.postId.isNotEmpty()) {
                                 TextButton(onClick = {
                                     navController.navigate("post_detail/${noti.postId}")
-                                    selectedNotification = 
+                                    selectedNotification = null
                                 }) { Text("언급된 게시글 보기") }
                             }
                         }
@@ -150,7 +150,7 @@ fun NotificationHistoryScreen(
                             if (noti.postId.isNotEmpty()) {
                                 TextButton(onClick = {
                                     navController.navigate("post_detail/${noti.postId}")
-                                    selectedNotification = 
+                                    selectedNotification = null
                                 }) { Text("인기글 보기") }
                             }
                         }
@@ -161,7 +161,7 @@ fun NotificationHistoryScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { selectedNotification = ) { Text("닫기") }
+                TextButton(onClick = { selectedNotification = null }) { Text("닫기") }
             }
         )
     }
@@ -204,4 +204,4 @@ fun NotificationItem(
             )
         }
     }
-} 
+}

@@ -6,16 +6,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.res.painterResource
-import com.yongsulim.terrariacommunity.UserRepository
 import android.net.Uri
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -26,7 +22,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import android.widget.Toast
 import android.util.Log
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,7 +37,7 @@ fun PostEditScreen(postId: String?, postRepository: PostRepository = PostReposit
     var expanded by remember { mutableStateOf(false) }
     var originalAuthorId by remember { mutableStateOf("") } // To store authorId of existing post
     var originalTimestamp by remember { mutableStateOf(System.currentTimeMillis()) } // To store timestamp of existing post
-    var selectedImageUri by remember { mutableStateOf<Uri?>() } // 선택된 이미지 URI 상태
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) } // 선택된 이미지 URI 상태
     val videoUrl = remember { mutableStateOf("") } // 비디오 URL 상태 추가
 
     val imagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
@@ -68,9 +63,9 @@ fun PostEditScreen(postId: String?, postRepository: PostRepository = PostReposit
             // New post: set author based on current user
             val currentUser = firebaseAuth.currentUser
             author.value = when {
-                currentUser == 
+                currentUser == null -> "알 수 없음" // Should not happen if user is logged in
                 currentUser.isAnonymous -> "게스트"
-                currentUser.displayName != 
+                currentUser.displayName != null -> currentUser.displayName!!
                 else -> "알 수 없음"
             }
         }
@@ -82,7 +77,7 @@ fun PostEditScreen(postId: String?, postRepository: PostRepository = PostReposit
                 title = { Text(if (postId.isNullOrEmpty()) "새 게시물 작성" else "게시물 수정") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(painterResource(id = ), contentDescription = "뒤로 가기")
+                        Icon(painterResource(id = R.drawable.ic_arrow_back), contentDescription = "뒤로 가기")
                     }
                 }
             )
@@ -150,7 +145,7 @@ fun PostEditScreen(postId: String?, postRepository: PostRepository = PostReposit
             selectedImageUri?.let { uri ->
                 AsyncImage(
                     model = uri,
-                    contentDescription = ,
+                    contentDescription = null,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(200.dp),
@@ -183,12 +178,12 @@ fun PostEditScreen(postId: String?, postRepository: PostRepository = PostReposit
                 onClick = {
                     coroutineScope.launch {
                         val currentUser = firebaseAuth.currentUser
-                        var uploadedImageUrl: String? = 
+                        var uploadedImageUrl: String? = null
 
-                        if (selectedImageUri != ) {
+                        if (selectedImageUri != null) {
                             try {
                                 uploadedImageUrl = postRepository.uploadImage(selectedImageUri!!)
-                                if (uploadedImageUrl == ) {
+                                if (uploadedImageUrl == null) {
                                     Toast.makeText(context, "이미지 업로드 실패", Toast.LENGTH_SHORT).show()
                                     return@launch // 이미지 업로드 실패 시 게시물 저장 중단
                                 }
@@ -208,7 +203,7 @@ fun PostEditScreen(postId: String?, postRepository: PostRepository = PostReposit
                                 authorId = currentUser?.uid ?: "",
                                 category = selectedCategory,
                                 imageUrl = uploadedImageUrl, // 업로드된 이미지 URL 저장
-                                videoUrl = videoUrl.value.ifBlank { 
+                                videoUrl = videoUrl.value.ifBlank { null } // 비디오 URL 저장
                             )
                             postRepository.addOrUpdatePost(newPost) // addOrUpdatePost 사용
                             currentUser?.uid?.let { uid ->
@@ -225,7 +220,7 @@ fun PostEditScreen(postId: String?, postRepository: PostRepository = PostReposit
                                 timestamp = originalTimestamp, // Use the stored originalTimestamp
                                 category = selectedCategory,
                                 imageUrl = uploadedImageUrl, // 업로드된 이미지 URL 저장
-                                videoUrl = videoUrl.value.ifBlank { 
+                                videoUrl = videoUrl.value.ifBlank { null } // 비디오 URL 저장
                             )
                             postRepository.addOrUpdatePost(updatedPost) // addOrUpdatePost 사용
                         }
