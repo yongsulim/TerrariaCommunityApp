@@ -82,10 +82,10 @@ fun PostDetailScreen(postId: String, postRepository: PostRepository = PostReposi
             )
         },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
-    ) {
+    ) { paddingValues ->
         Column(
             modifier = Modifier
-                .padding(it)
+                .padding(paddingValues)
                 .padding(16.dp)
                 .fillMaxSize()
         ) {
@@ -494,7 +494,7 @@ fun CommentItem(
 }
 
 private fun extractYouTubeVideoId(url: String): String? {
-    val regex = "(?<=watch\?v=|/videos/|embed/|youtu.be/|/v/|/e/|watch\?v%3D|watch\?feature=player_embedded&v=|%2Fvideos%2F|embedCEmbedCEmbedC|youtu.be%2F|%2Fv/|eEmbedCEmbedC)([^#\&\?\n]*)".trimIndent().toRegex()
+    val regex = "(?<=watch\\\\?v=|/videos/|embed/|youtu.be/|/v/|/e/|watch\\\\?v%3D|watch\\\\?feature=player_embedded&v=|%2Fvideos%2F|embedCEmbedCEmbedC|youtu.be%2F|%2Fv/|eEmbedCEmbedCEmbedC)([^#&\\\\?\n]*)".toRegex()
     val matchResult = regex.find(url)
     return matchResult?.value
 }

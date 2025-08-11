@@ -21,7 +21,7 @@ fun CreateChatRoomScreen(
     var roomName by remember { mutableStateOf("") }
     var participantInput by remember { mutableStateOf("") } // 쉼표로 UID 구분
     var isGroup by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf("") }
     var profileImageUrl by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
